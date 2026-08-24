@@ -17,10 +17,10 @@ services:
       DEVBOX_GUI_URL: ""
     ports:
       - target: 22
-        published: "2222"
+        published: "2233"
         protocol: tcp
       - target: 6080
-        published: "6080"
+        published: "6081"
         protocol: tcp
     volumes:
       - /DATA/AppData/omp-devbox/persist:/persist
@@ -35,7 +35,7 @@ x-casaos:
   category: Developer
   description:
     en_us: Persistent OMP coding workstation with SSH, tmux, Orca CLI and optional browser GUI.
-  port_map: "6080"
+  port_map: "6081"
   scheme: http
   index: /vnc.html?autoconnect=1&resize=scale
   title:

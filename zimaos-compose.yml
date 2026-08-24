@@ -1,7 +1,7 @@
 name: omp-devbox
 services:
   devbox:
-    image: ghcr.io/REPLACE_WITH_YOUR_GITHUB_USER/omp-devbox:latest
+    image: ghcr.io/lodebla/omp-devbox:latest
     container_name: omp-devbox
     hostname: omp-devbox
     restart: unless-stopped
@@ -10,7 +10,7 @@ services:
       TZ: Europe/Rome
       PUID: "1000"
       PGID: "1000"
-      DEVBOX_AUTHORIZED_KEYS: "REPLACE_WITH_YOUR_SSH_PUBLIC_KEY"
+      DEVBOX_AUTHORIZED_KEYS: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHpki+FI0wCIT4Vj+I18h1EArojS+c5GOhpRIEa1RYUX omp-devbox"
       # Optional. Leave empty and run `browser-gui password` once over SSH.
       DEVBOX_VNC_PASSWORD: ""
       # Optional: set this if you expose noVNC through Cloudflare Access.

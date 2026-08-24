@@ -54,8 +54,10 @@ RUN npm install --global "chrome-devtools-mcp@${CHROME_DEVTOOLS_MCP_VERSION}" \
 
 COPY --from=orca-builder /out/orca /usr/local/bin/orca
 
-RUN groupadd --gid 1000 dev \
-    && useradd --uid 1000 --gid 1000 --create-home --shell /bin/bash dev \
+# node:24-bookworm already provides node:node with UID/GID 1000.
+# Reuse it for the persistent dev account.
+RUN groupmod --new-name dev node \
+    && usermod --login dev --home /home/dev --move-home --shell /bin/bash --gid dev node \
     && printf 'dev ALL=(ALL) NOPASSWD:ALL\n' > /etc/sudoers.d/devbox \
     && chmod 0440 /etc/sudoers.d/devbox
 

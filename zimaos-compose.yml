@@ -1,7 +1,7 @@
 name: omp-devbox
 services:
   devbox:
-    image: ghcr.io/REPLACE_WITH_YOUR_GITHUB_USER/omp-devbox:latest
+    image: ghcr.io/lodebla/omp-devbox:latest
     container_name: omp-devbox
     hostname: omp-devbox
     restart: unless-stopped

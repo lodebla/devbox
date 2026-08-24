@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+archive="${1:?usage: omp-sync-import <archive.tar.gz>}"
+[[ -f "$archive" ]] || { echo "Archive not found: $archive" >&2; exit 2; }
+
+tmp="$(mktemp -d)"
+trap 'rm -rf "$tmp"' EXIT
+
+# Reject obvious path traversal before extraction.
+if tar -tzf "$archive" | grep -Eq '(^/|(^|/)\.\.(/|$))'; then
+  echo "Refusing archive with absolute or parent-traversal paths" >&2
+  exit 2
+fi
+
+tar -xzf "$archive" -C "$tmp"
+src="$tmp/.omp"
+[[ -d "$src" ]] || { echo "Archive does not contain .omp/" >&2; exit 2; }
+
+dst="$HOME/.omp"
+mkdir -p "$dst"
+
+# Patterns without a slash match a basename at any depth. This covers the
+# default profile and named profiles under ~/.omp/profiles/<name>/agent.
+# rsync protects excluded destination paths from --delete, so server-side auth
+# and runtime state survive while the rest of ~/.omp mirrors the client.
+excludes=(
+  --exclude='agent.db'
+  --exclude='agent.db-*'
+  --exclude='.env'
+  --exclude='sessions/'
+  --exclude='blobs/'
+  --exclude='logs/'
+  --exclude='auth-broker.token'
+  --exclude='auth-gateway.token'
+  --exclude='node_modules/'
+)
+
+rsync -a --delete "${excludes[@]}" "$src/" "$dst/"
+
+# Rehydrate plugin dependencies for Linux instead of copying node_modules from
+# Windows/macOS. Handle both the normal plugin root and future/profile roots.
+while IFS= read -r -d '' package_json; do
+  plugin_dir="$(dirname "$package_json")"
+  echo "Reinstalling OMP plugin npm dependencies in $plugin_dir ..."
+  bun install --cwd "$plugin_dir"
+done < <(find "$dst" -type f -path '*/plugins/package.json' -not -path '*/node_modules/*' -print0 2>/dev/null)
+
+chmod -R u+rwX,go-rwx "$dst" 2>/dev/null || true
+
+echo "OMP configuration synchronized."
+echo "Server-only browser/MCP wiring remains outside ~/.omp under /etc/devbox."
+echo "Credentials, session history and local node_modules were intentionally preserved/excluded."

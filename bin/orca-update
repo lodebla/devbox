@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+echo "Updating orca-cli from github.com/orca-cli/orca@latest"
+sudo env GOBIN=/usr/local/bin go install github.com/orca-cli/orca/cmd/orca@latest
+orca version
+cat <<'MSG'
+Note: this update lives in the current container writable layer. Rebuild the image to make it survive a container recreation.
+MSG

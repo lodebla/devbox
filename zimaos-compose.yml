@@ -1,0 +1,42 @@
+name: omp-devbox
+services:
+  devbox:
+    image: ghcr.io/REPLACE_WITH_YOUR_GITHUB_USER/omp-devbox:latest
+    container_name: omp-devbox
+    hostname: omp-devbox
+    restart: unless-stopped
+    shm_size: "1gb"
+    environment:
+      TZ: Europe/Rome
+      PUID: "1000"
+      PGID: "1000"
+      DEVBOX_AUTHORIZED_KEYS: "REPLACE_WITH_YOUR_SSH_PUBLIC_KEY"
+      # Optional. Leave empty and run `browser-gui password` once over SSH.
+      DEVBOX_VNC_PASSWORD: ""
+      # Optional: set this if you expose noVNC through Cloudflare Access.
+      DEVBOX_GUI_URL: ""
+    ports:
+      - target: 22
+        published: "2222"
+        protocol: tcp
+      - target: 6080
+        published: "6080"
+        protocol: tcp
+    volumes:
+      - /DATA/AppData/omp-devbox/persist:/persist
+      - /DATA/AppData/omp-devbox/workspace:/workspace
+
+x-casaos:
+  architectures:
+    - amd64
+    - arm64
+  main: devbox
+  author: Custom
+  category: Developer
+  description:
+    en_us: Persistent OMP coding workstation with SSH, tmux, Orca CLI and optional browser GUI.
+  port_map: "6080"
+  scheme: http
+  index: /vnc.html?autoconnect=1&resize=scale
+  title:
+    en_us: OMP Devbox

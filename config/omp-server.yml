@@ -1,0 +1,6 @@
+# Server-only OMP settings overlay. The current released OMP browser tool does
+# not yet document an external CDP target, so the built-in browser is disabled
+# here to avoid accidentally opening a second, invisible Chromium instance.
+# The shared visible Chromium is exposed to OMP through Chrome DevTools MCP.
+browser:
+  enabled: false

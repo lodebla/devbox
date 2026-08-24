@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+set -u
+fail=0
+
+check_cmd() {
+  local cmd="$1"
+  if command -v "$cmd" >/dev/null 2>&1; then
+    printf '[ok]   %-15s %s\n' "$cmd" "$(command -v "$cmd")"
+  else
+    printf '[fail] %-15s missing\n' "$cmd"
+    fail=1
+  fi
+}
+
+for cmd in omp orca rg git gh tmux bun node npm python3 go chromium chrome-devtools-mcp; do
+  check_cmd "$cmd"
+done
+
+if curl -fsS --max-time 1 http://127.0.0.1:9222/json/version >/dev/null 2>&1; then
+  echo '[ok]   browser CDP     http://127.0.0.1:9222'
+else
+  echo '[fail] browser CDP     unavailable'
+  fail=1
+fi
+
+if browser-gui status >/dev/null 2>&1; then
+  echo '[info] browser GUI     enabled'
+else
+  echo '[info] browser GUI     disabled (normal)'
+fi
+
+printf '[info] OMP config dir   '
+omp config path 2>/dev/null || echo '~/.omp/agent'
+exit "$fail"

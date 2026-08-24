@@ -1,0 +1,129 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+DISPLAY="${DISPLAY:-:99}"
+STATE_DIR="${XDG_RUNTIME_DIR:-/tmp}/omp-devbox-${UID}"
+PROFILE_DIR="${CHROME_USER_DATA_DIR:-/persist/chromium}"
+CDP_HOST="127.0.0.1"
+CDP_PORT="${DEVBOX_CDP_PORT:-9222}"
+SCREEN="${DEVBOX_SCREEN:-1920x1080x24}"
+mkdir -p "$STATE_DIR" "$PROFILE_DIR"
+
+pidfile() { printf '%s/%s.pid' "$STATE_DIR" "$1"; }
+logfile() { printf '%s/%s.log' "$STATE_DIR" "$1"; }
+
+pid_alive() {
+  local file="$1" pid
+  [[ -f "$file" ]] || return 1
+  pid="$(cat "$file" 2>/dev/null || true)"
+  [[ "$pid" =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null
+}
+
+start_proc() {
+  local name="$1"; shift
+  local pf; pf="$(pidfile "$name")"
+  if pid_alive "$pf"; then return 0; fi
+  rm -f "$pf"
+  nohup "$@" >"$(logfile "$name")" 2>&1 &
+  echo $! > "$pf"
+}
+
+wait_for_cdp() {
+  local i
+  for i in $(seq 1 60); do
+    if curl -fsS --max-time 1 "http://${CDP_HOST}:${CDP_PORT}/json/version" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 0.25
+  done
+  return 1
+}
+
+start() {
+  start_proc xvfb Xvfb "$DISPLAY" -screen 0 "$SCREEN" -ac -nolisten tcp
+  sleep 0.2
+  start_proc openbox env DISPLAY="$DISPLAY" openbox
+  sleep 0.2
+  start_proc chromium env DISPLAY="$DISPLAY" chromium \
+    --user-data-dir="$PROFILE_DIR" \
+    --remote-debugging-address="$CDP_HOST" \
+    --remote-debugging-port="$CDP_PORT" \
+    --no-first-run \
+    --no-default-browser-check \
+    --disable-dev-shm-usage \
+    --no-sandbox \
+    --window-size=1920,1080 \
+    about:blank
+
+  if wait_for_cdp; then
+    printf 'Browser ready: CDP http://%s:%s (loopback only)\n' "$CDP_HOST" "$CDP_PORT"
+  else
+    printf 'Browser failed to expose CDP. Run: browser-service logs\n' >&2
+    return 1
+  fi
+}
+
+stop_one() {
+  local name="$1" pf pid
+  pf="$(pidfile "$name")"
+  if pid_alive "$pf"; then
+    pid="$(cat "$pf")"
+    kill "$pid" 2>/dev/null || true
+    for _ in $(seq 1 20); do
+      kill -0 "$pid" 2>/dev/null || break
+      sleep 0.1
+    done
+    kill -9 "$pid" 2>/dev/null || true
+  fi
+  rm -f "$pf"
+}
+
+stop() {
+  stop_one chromium
+  stop_one openbox
+  stop_one xvfb
+  printf 'Browser service stopped\n'
+}
+
+status() {
+  local ok=0
+  for name in xvfb openbox chromium; do
+    if pid_alive "$(pidfile "$name")"; then
+      printf '%-10s running (pid %s)\n' "$name" "$(cat "$(pidfile "$name")")"
+    else
+      printf '%-10s stopped\n' "$name"
+      ok=1
+    fi
+  done
+  if curl -fsS --max-time 1 "http://${CDP_HOST}:${CDP_PORT}/json/version" >/dev/null 2>&1; then
+    printf 'cdp        ready at http://%s:%s\n' "$CDP_HOST" "$CDP_PORT"
+  else
+    printf 'cdp        unavailable\n'
+    ok=1
+  fi
+  return "$ok"
+}
+
+logs() {
+  for name in xvfb openbox chromium; do
+    printf '\n===== %s =====\n' "$name"
+    tail -n 80 "$(logfile "$name")" 2>/dev/null || true
+  done
+}
+
+open_url() {
+  local url="${1:?usage: browser-service open <url>}"
+  start >/dev/null
+  env DISPLAY="$DISPLAY" chromium --user-data-dir="$PROFILE_DIR" "$url" >/dev/null 2>&1 &
+  printf 'Requested browser URL: %s\n' "$url"
+}
+
+case "${1:-status}" in
+  start) start ;;
+  stop) stop ;;
+  restart) stop; start ;;
+  status) status ;;
+  logs) logs ;;
+  open) shift; open_url "$@" ;;
+  *) echo "Usage: browser-service {start|stop|restart|status|logs|open <url>}" >&2; exit 2 ;;
+esac

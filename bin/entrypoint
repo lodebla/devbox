@@ -1,0 +1,132 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+log() { printf '[devbox] %s\n' "$*"; }
+
+PUID="${PUID:-1000}"
+PGID="${PGID:-1000}"
+
+if ! [[ "$PUID" =~ ^[0-9]+$ && "$PGID" =~ ^[0-9]+$ ]]; then
+  log "PUID and PGID must be numeric"
+  exit 2
+fi
+
+current_gid="$(id -g dev)"
+current_uid="$(id -u dev)"
+if [[ "$current_gid" != "$PGID" ]]; then
+  groupmod -o -g "$PGID" dev
+fi
+if [[ "$current_uid" != "$PUID" ]]; then
+  usermod -o -u "$PUID" dev
+fi
+chown -R dev:dev /home/dev
+
+mkdir -p \
+  /persist/omp \
+  /persist/orca \
+  /persist/ssh \
+  /persist/ssh-host-keys \
+  /persist/config \
+  /persist/data \
+  /persist/chromium \
+  /persist/vnc \
+  /workspace
+
+# These top-level directories can be newly introduced by an image update even
+# when the ownership marker already exists. Keep the directories themselves
+# writable by the non-root dev user on every boot without recursively walking
+# large persistent trees.
+chown dev:dev /persist /persist/omp /persist/orca /persist/ssh /persist/ssh-host-keys \
+  /persist/config /persist/data /persist/chromium /persist/vnc /workspace 2>/dev/null || true
+
+ownership_marker="/persist/.devbox-owner"
+owner_value="${PUID}:${PGID}"
+if [[ ! -f "$ownership_marker" || "$(cat "$ownership_marker" 2>/dev/null || true)" != "$owner_value" ]]; then
+  log "Applying ownership ${owner_value} to /persist (one-time for this UID/GID)"
+  chown -R dev:dev /persist
+  printf '%s\n' "$owner_value" > "$ownership_marker"
+fi
+# Do not recursively chown /workspace: it may point at an existing large tree.
+chown dev:dev /workspace 2>/dev/null || true
+
+link_persist() {
+  local target="$1" source="$2"
+  if [[ -e "$target" && ! -L "$target" ]]; then
+    # A fresh image may have empty directories; preserve non-empty paths instead of deleting data.
+    if [[ -d "$target" && -z "$(ls -A "$target" 2>/dev/null)" ]]; then
+      rmdir "$target"
+    else
+      log "Cannot link $target -> $source because target already contains data"
+      return 1
+    fi
+  fi
+  ln -sfn "$source" "$target"
+}
+
+link_persist /home/dev/.omp /persist/omp
+link_persist /home/dev/.orca /persist/orca
+link_persist /home/dev/.ssh /persist/ssh
+link_persist /home/dev/.config /persist/config
+
+# OMP discovers MCP definitions from several tool-native locations. Keep this
+# server-only browser definition outside ~/.omp so local -> server OMP sync can
+# remain clean and profile-independent. OMP-native definitions still have higher
+# priority if the user deliberately defines the same server name.
+mkdir -p /home/dev/.cursor
+ln -sfn /etc/devbox/omp-devbox-mcp.json /home/dev/.cursor/mcp.json
+chown -h dev:dev /home/dev/.cursor/mcp.json
+chown dev:dev /home/dev/.cursor
+
+chmod 700 /persist/ssh
+if [[ -n "${DEVBOX_AUTHORIZED_KEYS:-}" ]]; then
+  printf '%s\n' "$DEVBOX_AUTHORIZED_KEYS" > /persist/ssh/authorized_keys
+fi
+if [[ -f /persist/ssh/authorized_keys ]]; then
+  chown dev:dev /persist/ssh/authorized_keys
+  chmod 600 /persist/ssh/authorized_keys
+else
+  log "WARNING: no SSH authorized_keys configured. Set DEVBOX_AUTHORIZED_KEYS in ZimaOS."
+fi
+
+if [[ ! -f /persist/ssh-host-keys/ssh_host_ed25519_key ]]; then
+  ssh-keygen -q -t ed25519 -N '' -f /persist/ssh-host-keys/ssh_host_ed25519_key
+fi
+if [[ ! -f /persist/ssh-host-keys/ssh_host_rsa_key ]]; then
+  ssh-keygen -q -t rsa -b 3072 -N '' -f /persist/ssh-host-keys/ssh_host_rsa_key
+fi
+chmod 600 /persist/ssh-host-keys/ssh_host_*_key
+chmod 644 /persist/ssh-host-keys/ssh_host_*_key.pub
+
+if [[ -n "${DEVBOX_VNC_PASSWORD:-}" ]]; then
+  mkdir -p /persist/vnc
+  x11vnc -storepasswd "$DEVBOX_VNC_PASSWORD" /persist/vnc/passwd >/dev/null
+  chown dev:dev /persist/vnc/passwd
+  chmod 600 /persist/vnc/passwd
+fi
+
+# Give interactive shells the same server-only settings as the container process.
+cat > /etc/profile.d/devbox.sh <<'PROFILE'
+export DISPLAY=:99
+export XDG_CONFIG_HOME=/persist/config
+export XDG_DATA_HOME=/persist/data
+export GIT_CONFIG_GLOBAL=/persist/gitconfig
+export PI_CONFIG_FILES=/etc/devbox/omp-server.yml
+export PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+export CHROME_USER_DATA_DIR=/persist/chromium
+export PATH=/opt/omp/node_modules/.bin:/usr/local/go/bin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+PROFILE
+chmod 644 /etc/profile.d/devbox.sh
+
+log "Starting shared Chromium service"
+if ! gosu dev env \
+    DISPLAY=:99 \
+    HOME=/home/dev \
+    XDG_CONFIG_HOME=/persist/config \
+    XDG_DATA_HOME=/persist/data \
+    CHROME_USER_DATA_DIR=/persist/chromium \
+    browser-service start; then
+  log "WARNING: browser service did not start. SSH will still be available; inspect with: browser-service logs"
+fi
+
+log "Starting SSH on container port 22"
+exec /usr/sbin/sshd -D -e -f /etc/ssh/sshd_config

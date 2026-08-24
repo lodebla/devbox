@@ -1,0 +1,26 @@
+name: omp-devbox
+services:
+  devbox:
+    build:
+      context: .
+      args:
+        BUN_VERSION: "1.3.14"
+        OMP_VERSION: "latest"
+    image: omp-devbox:local
+    container_name: omp-devbox
+    hostname: omp-devbox
+    restart: unless-stopped
+    shm_size: "1gb"
+    environment:
+      TZ: Europe/Rome
+      PUID: "1000"
+      PGID: "1000"
+      DEVBOX_AUTHORIZED_KEYS: "${DEVBOX_AUTHORIZED_KEYS:-}"
+      DEVBOX_VNC_PASSWORD: "${DEVBOX_VNC_PASSWORD:-}"
+      DEVBOX_GUI_URL: "${DEVBOX_GUI_URL:-}"
+    ports:
+      - "2222:22"
+      - "6080:6080"
+    volumes:
+      - ./data/persist:/persist
+      - ./data/workspace:/workspace

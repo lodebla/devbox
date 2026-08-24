@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+version="${1:-latest}"
+echo "Updating OMP in the running container to: $version"
+sudo bun add --cwd /opt/omp "@oh-my-pi/pi-coding-agent@${version}"
+/opt/omp/node_modules/.bin/omp --version
+cat <<'MSG'
+Note: this update lives in the current container writable layer. Rebuild the image to make it survive a container recreation.
+MSG

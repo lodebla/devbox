@@ -1,0 +1,76 @@
+name: Build devbox image
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  smoke-test-amd64:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          platforms: linux/amd64
+          tags: omp-devbox:smoke
+      - name: Start devbox
+        run: docker run -d --name omp-devbox-smoke omp-devbox:smoke
+      - name: Wait for SSH and browser
+        run: |
+          for i in $(seq 1 30); do
+            if docker exec -u dev omp-devbox-smoke bash -lc 'devbox-health'; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs omp-devbox-smoke
+          exit 1
+      - name: Verify browser isolation and optional GUI
+        run: |
+          docker exec -u dev omp-devbox-smoke bash -lc 'curl -fsS http://127.0.0.1:9222/json/version >/dev/null'
+          docker exec -u dev omp-devbox-smoke bash -lc 'test -L ~/.cursor/mcp.json && grep -q devbox-chromium ~/.cursor/mcp.json'
+          if docker exec -u dev omp-devbox-smoke bash -lc 'browser-gui status'; then
+            echo 'GUI unexpectedly enabled by default' >&2
+            exit 1
+          fi
+      - name: Container logs on failure
+        if: failure()
+        run: docker logs omp-devbox-smoke || true
+      - name: Cleanup
+        if: always()
+        run: docker rm -f omp-devbox-smoke || true
+
+  publish:
+    needs: smoke-test-amd64
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/metadata-action@v5
+        id: meta
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/omp-devbox
+          tags: |
+            type=raw,value=latest
+            type=sha,prefix=sha-
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}

@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+usage() {
+  cat <<'MSG'
+Usage:
+  omp-session start <name> [directory]
+  omp-session attach <name>
+  omp-session send <name> <message...>
+  omp-session capture <name> [lines]
+  omp-session status <name>
+  omp-session stop <name>
+  omp-session list
+
+Sessions are stored in tmux as omp-<name>.
+MSG
+}
+
+session_name() {
+  local name="${1:?missing session name}"
+  [[ "$name" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "Invalid session name: $name" >&2; exit 2; }
+  printf 'omp-%s' "$name"
+}
+
+cmd="${1:-}"
+case "$cmd" in
+  start)
+    name="${2:?missing name}"; dir="${3:-/workspace}"; s="$(session_name "$name")"
+    if tmux has-session -t "$s" 2>/dev/null; then
+      echo "$s already exists"
+    else
+      tmux new-session -d -s "$s" -c "$dir" 'exec omp'
+      echo "Started $s in $dir"
+    fi
+    ;;
+  attach)
+    s="$(session_name "${2:?missing name}")"
+    exec tmux attach-session -t "$s"
+    ;;
+  send)
+    name="${2:?missing name}"; shift 2; s="$(session_name "$name")"
+    [[ $# -gt 0 ]] || { echo 'missing message' >&2; exit 2; }
+    msg="$*"
+    tmux send-keys -t "$s" -l -- "$msg"
+    tmux send-keys -t "$s" Enter
+    echo "Sent message to $s"
+    ;;
+  capture)
+    s="$(session_name "${2:?missing name}")"; lines="${3:-120}"
+    [[ "$lines" =~ ^[0-9]+$ ]] || { echo 'lines must be numeric' >&2; exit 2; }
+    tmux capture-pane -p -t "$s" -S "-$lines"
+    ;;
+  status)
+    s="$(session_name "${2:?missing name}")"
+    if tmux has-session -t "$s" 2>/dev/null; then echo "$s running"; else echo "$s stopped"; exit 1; fi
+    ;;
+  stop)
+    s="$(session_name "${2:?missing name}")"
+    tmux kill-session -t "$s" 2>/dev/null || true
+    echo "Stopped $s"
+    ;;
+  list)
+    tmux list-sessions -F '#{session_name}\t#{session_windows} windows\t#{session_created_string}' 2>/dev/null | grep '^omp-' || true
+    ;;
+  *) usage; [[ -n "$cmd" ]] && exit 2 || exit 0 ;;
+esac

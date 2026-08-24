@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+unset PI_CONFIG_FILES
+exec /opt/omp/node_modules/.bin/omp "$@"

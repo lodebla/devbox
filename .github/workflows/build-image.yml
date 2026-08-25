@@ -21,8 +21,14 @@ jobs:
           load: true
           platforms: linux/amd64
           tags: omp-devbox:smoke
+      - name: Create smoke-test SSH key
+        run: ssh-keygen -q -t ed25519 -N '' -f /tmp/omp-devbox-smoke-key
       - name: Start devbox
-        run: docker run -d --name omp-devbox-smoke omp-devbox:smoke
+        run: |
+          docker run -d --name omp-devbox-smoke \
+            -e DEVBOX_AUTHORIZED_KEYS="$(cat /tmp/omp-devbox-smoke-key.pub)" \
+            -p 127.0.0.1:22222:22 \
+            omp-devbox:smoke
       - name: Wait for SSH and browser
         run: |
           for i in $(seq 1 30); do
@@ -30,6 +36,21 @@ jobs:
               exit 0
             fi
             sleep 2
+          done
+          docker logs omp-devbox-smoke
+          exit 1
+      - name: Verify real SSH public-key login
+        run: |
+          for i in $(seq 1 20); do
+            if ssh -p 22222 \
+              -i /tmp/omp-devbox-smoke-key \
+              -o BatchMode=yes \
+              -o StrictHostKeyChecking=no \
+              -o UserKnownHostsFile=/dev/null \
+              dev@127.0.0.1 'test "$(whoami)" = dev'; then
+              exit 0
+            fi
+            sleep 1
           done
           docker logs omp-devbox-smoke
           exit 1

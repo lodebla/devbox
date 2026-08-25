@@ -1,7 +1,7 @@
 name: omp-devbox
 services:
   devbox:
-    image: ghcr.io/lodebla/omp-devbox:latest
+    image: ghcr.io/REPLACE_WITH_YOUR_GITHUB_USER/omp-devbox:latest
     container_name: omp-devbox
     hostname: omp-devbox
     restart: unless-stopped
@@ -17,10 +17,10 @@ services:
       DEVBOX_GUI_URL: ""
     ports:
       - target: 22
-        published: "2233"
+        published: "2222"
         protocol: tcp
       - target: 6080
-        published: "6081"
+        published: "6080"
         protocol: tcp
     volumes:
       - /DATA/AppData/omp-devbox/persist:/persist
@@ -35,7 +35,7 @@ x-casaos:
   category: Developer
   description:
     en_us: Persistent OMP coding workstation with SSH, tmux, Orca CLI and optional browser GUI.
-  port_map: "6081"
+  port_map: "6080"
   scheme: http
   index: /vnc.html?autoconnect=1&resize=scale
   title:

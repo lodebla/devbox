@@ -38,6 +38,9 @@ mkdir -p \
 # large persistent trees.
 chown dev:dev /persist /persist/omp /persist/orca /persist/ssh /persist/ssh-host-keys \
   /persist/config /persist/data /persist/chromium /persist/vnc /workspace 2>/dev/null || true
+# sshd StrictModes rejects authorized_keys paths that traverse writable parent
+# directories. ZimaOS may create the bind-mounted /persist directory as 0777.
+chmod 755 /persist
 
 ownership_marker="/persist/.devbox-owner"
 owner_value="${PUID}:${PGID}"

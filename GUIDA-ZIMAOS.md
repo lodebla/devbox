@@ -49,7 +49,7 @@ git push -u origin main
 
 Se preferisci HTTPS, usa il normale URL HTTPS del repository al posto del remote SSH.
 
-3. Il workflow `.github/workflows/build-image.yml` partirà sul push di `main`. Prima costruisce e **avvia realmente** la variante AMD64 come smoke test (`devbox-health`, Chromium/CDP e GUI spenta di default); solo dopo il test costruisce AMD64 + ARM64 e pubblica:
+3. Il workflow `.github/workflows/build-image.yml` partirà sul push di `main`. Prima costruisce e **avvia realmente** la variante AMD64 come smoke test (`devbox-health`, Chromium/CDP, GUI spenta di default e un vero login SSH con chiave pubblica); solo dopo il test costruisce AMD64 + ARM64 e pubblica:
 
 ```text
 ghcr.io/TUO_UTENTE/omp-devbox:latest
@@ -637,6 +637,16 @@ Il dev user ha `sudo` senza password **dentro il container** per poter installar
 ## 19. Troubleshooting rapido
 
 ### SSH non entra
+
+Le build correnti sbloccano esplicitamente l'account `dev` per l'autenticazione a chiave mantenendo `PasswordAuthentication no`, e correggono `/persist` a permessi `755` per essere compatibili con `sshd StrictModes`. Il workflow GitHub prova anche un vero login SSH prima di pubblicare l'immagine, quindi una regressione di questo tipo blocca la release.
+
+Se stai ancora eseguendo un'immagine precedente e nei log compare `User dev not allowed because account is locked`, la correzione temporanea è:
+
+```bash
+usermod -p '*' dev
+```
+
+Dopo aver aggiornato all'immagine corrente non è più necessario eseguire questo comando manualmente.
 
 Verifica che `DEVBOX_AUTHORIZED_KEYS` contenga la riga `.pub` e che stai usando:
 

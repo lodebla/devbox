@@ -54,10 +54,13 @@ RUN npm install --global "chrome-devtools-mcp@${CHROME_DEVTOOLS_MCP_VERSION}" \
 
 COPY --from=orca-builder /out/orca /usr/local/bin/orca
 
-# node:24-bookworm already provides node:node with UID/GID 1000.
-# Reuse it for the persistent dev account.
+# node:24-bookworm already provides node:node with UID/GID 1000. Reuse it for
+# the persistent dev account instead of attempting to allocate UID/GID 1000 twice.
+# The base node account has a locked shadow entry (!); '*' keeps password login
+# impossible but makes the account valid for SSH public-key authentication.
 RUN groupmod --new-name dev node \
     && usermod --login dev --home /home/dev --move-home --shell /bin/bash --gid dev node \
+    && usermod --password '*' dev \
     && printf 'dev ALL=(ALL) NOPASSWD:ALL\n' > /etc/sudoers.d/devbox \
     && chmod 0440 /etc/sudoers.d/devbox
 

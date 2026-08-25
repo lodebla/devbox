@@ -10,6 +10,14 @@ for f in Dockerfile config/sshd_config config/omp-server.yml config/omp-devbox-m
 done
 pass "required files exist"
 
+# node:24-bookworm already ships node:node as UID/GID 1000. The dev user must
+# reuse/rename it instead of trying to create a second UID/GID 1000.
+grep -q 'groupmod --new-name dev node' Dockerfile || fail "Dockerfile does not reuse the base node group"
+grep -q 'usermod --login dev' Dockerfile || fail "Dockerfile does not reuse the base node user"
+grep -Fq "usermod --password '*' dev" Dockerfile || fail "dev account is left locked for SSH public-key login"
+! grep -q 'groupadd --gid 1000 dev' Dockerfile || fail "Dockerfile tries to recreate occupied GID 1000"
+pass "base node UID/GID reuse and SSH account state"
+
 for f in bin/entrypoint bin/browser-service bin/browser-gui bin/omp-sync-import bin/devbox-health bin/omp-session bin/omp-raw bin/omp-update bin/orca-update sync/sync-omp.sh tests/test_static.sh; do
   bash -n "$f" || fail "bash syntax: $f"
 done
@@ -47,7 +55,8 @@ grep -q 'PI_CONFIG_FILES=/etc/devbox/omp-server.yml' Dockerfile || fail "server 
 pass "server overlay separation"
 
 grep -q 'chown dev:dev /persist /persist/omp' bin/entrypoint || fail "persistent top-level dirs are not repaired each boot"
-pass "persistent directory ownership"
+grep -q '^chmod 755 /persist$' bin/entrypoint || fail "/persist permissions are unsafe for sshd StrictModes"
+pass "persistent directory ownership and SSH-safe permissions"
 
 bash tests/test_sync_import.sh
 

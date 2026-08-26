@@ -29,5 +29,5 @@ tar -czf "$tmp" \
   -C "$parent" "$base"
 echo "Uploading sanitized OMP config to $REMOTE..."
 scp "$tmp" "${REMOTE}:${REMOTE_TMP}"
-ssh "$REMOTE" "omp-sync-import '$REMOTE_TMP'; rm -f '$REMOTE_TMP'"
+ssh "$REMOTE" "omp-sync-import '$REMOTE_TMP' && rm -f '$REMOTE_TMP' && if [ -f ~/.omp/plugins/package.json ]; then echo 'Ensuring OMP plugins are installed...'; bun install --cwd ~/.omp/plugins; fi"
 echo "Done."

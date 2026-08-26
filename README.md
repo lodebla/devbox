@@ -63,7 +63,7 @@ PowerShell:
 .\sync\sync-omp.ps1 -Remote devbox
 ```
 
-The sync intentionally excludes authentication DBs, session history, secrets and local `node_modules`. See `GUIDA-ZIMAOS.md` for details.
+The sync intentionally excludes authentication DBs, session history, secrets and local `node_modules`. After the import it automatically runs `bun install` in `~/.omp/plugins` when a plugin `package.json` is present, so Linux plugin dependencies are rehydrated on the devbox. See `GUIDA-ZIMAOS.md` for details.
 
 ## Installation
 

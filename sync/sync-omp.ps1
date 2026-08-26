@@ -38,7 +38,7 @@ try {
     & scp $tmp "${Remote}:${remoteTmp}"
     if ($LASTEXITCODE -ne 0) { throw "scp failed" }
 
-    & ssh $Remote "omp-sync-import '$remoteTmp'; rm -f '$remoteTmp'"
+    & ssh $Remote "omp-sync-import '$remoteTmp' && rm -f '$remoteTmp' && if [ -f ~/.omp/plugins/package.json ]; then echo 'Ensuring OMP plugins are installed...'; bun install --cwd ~/.omp/plugins; fi"
     if ($LASTEXITCODE -ne 0) { throw "remote import failed" }
 
     Write-Host "Done."

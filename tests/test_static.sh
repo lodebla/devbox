@@ -51,6 +51,10 @@ grep -q 'node_modules' sync/sync-omp.sh || fail "sync does not exclude node_modu
 grep -q 'agent.db' sync/sync-omp.ps1 || fail "PowerShell sync does not exclude agent.db"
 pass "sync exclusions"
 
+grep -q 'bun install' sync/sync-omp.sh || fail "bash sync does not reinstall OMP plugins after import"
+grep -q 'bun install' sync/sync-omp.ps1 || fail "PowerShell sync does not reinstall OMP plugins after import"
+pass "sync reinstalls OMP plugins"
+
 grep -q 'PI_CONFIG_FILES=/etc/devbox/omp-server.yml' Dockerfile || fail "server config overlay env missing"
 pass "server overlay separation"
 

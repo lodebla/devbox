@@ -30,6 +30,7 @@ mkdir -p \
   /persist/data \
   /persist/chromium \
   /persist/vnc \
+  /persist/nvim \
   /workspace
 
 # These top-level directories can be newly introduced by an image update even
@@ -37,7 +38,7 @@ mkdir -p \
 # writable by the non-root dev user on every boot without recursively walking
 # large persistent trees.
 chown dev:dev /persist /persist/omp /persist/orca /persist/ssh /persist/ssh-host-keys \
-  /persist/config /persist/data /persist/chromium /persist/vnc /workspace 2>/dev/null || true
+  /persist/config /persist/data /persist/chromium /persist/vnc /persist/nvim /workspace 2>/dev/null || true
 # sshd StrictModes rejects authorized_keys paths that traverse writable parent
 # directories. ZimaOS may create the bind-mounted /persist directory as 0777.
 chmod 755 /persist
@@ -70,6 +71,21 @@ link_persist /home/dev/.omp /persist/omp
 link_persist /home/dev/.orca /persist/orca
 link_persist /home/dev/.ssh /persist/ssh
 link_persist /home/dev/.config /persist/config
+
+# Neovim config is kept separately so it can be customized and retained across
+# image/container rebuilds without mixing the Kickstart git checkout with other
+# XDG config. Respect a pre-existing nvim config instead of overwriting it.
+if [[ -e /persist/config/nvim && ! -L /persist/config/nvim ]]; then
+  log "Existing /persist/config/nvim found; leaving it untouched"
+else
+  if [[ -z "$(ls -A /persist/nvim 2>/dev/null)" ]]; then
+    log "Initializing persistent Neovim config from Kickstart.nvim"
+    cp -a /opt/kickstart.nvim/. /persist/nvim/
+    chown -R dev:dev /persist/nvim
+  fi
+  ln -sfn /persist/nvim /persist/config/nvim
+  chown -h dev:dev /persist/config/nvim
+fi
 
 # OMP discovers MCP definitions from several tool-native locations. Keep this
 # server-only browser definition outside ~/.omp so local -> server OMP sync can

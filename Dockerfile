@@ -13,6 +13,7 @@ FROM node:${NODE_MAJOR}-bookworm
 
 ARG OMP_VERSION=latest
 ARG CHROME_DEVTOOLS_MCP_VERSION
+ARG TARGETARCH
 ENV DEBIAN_FRONTEND=noninteractive \
     TZ=Europe/Rome \
     DISPLAY=:99 \
@@ -31,15 +32,39 @@ RUN ln -sf /usr/local/bin/bun /usr/local/bin/bunx
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
       openssh-server sudo gosu tmux \
-      git gh git-lfs ripgrep rsync \
+      git gh git-lfs ripgrep rsync fd-find xclip \
       curl wget ca-certificates gnupg jq unzip zip \
       build-essential make cmake pkg-config \
       python3 python3-pip python3-venv \
       chromium xvfb openbox x11vnc novnc websockify \
       dbus-x11 xdg-utils fonts-liberation fonts-dejavu-core \
-      procps iproute2 lsof less nano vim-tiny \
+      procps iproute2 lsof less nano vim \
     && rm -rf /var/lib/apt/lists/* \
-    && mkdir -p /run/sshd /opt/omp /etc/devbox
+    && mkdir -p /run/sshd /opt/omp /etc/devbox \
+    && ln -sf /usr/bin/fdfind /usr/local/bin/fd
+
+# Kickstart.nvim tracks the latest stable Neovim. Debian stable is normally
+# behind, so install the official stable tarball for the image architecture.
+RUN set -eux; \
+    case "${TARGETARCH}" in \
+      amd64) nvim_arch="x86_64" ;; \
+      arm64) nvim_arch="arm64" ;; \
+      *) echo "Unsupported TARGETARCH for Neovim: ${TARGETARCH}" >&2; exit 1 ;; \
+    esac; \
+    curl -fsSL "https://github.com/neovim/neovim/releases/latest/download/nvim-linux-${nvim_arch}.tar.gz" -o /tmp/nvim.tar.gz; \
+    rm -rf "/opt/nvim-linux-${nvim_arch}"; \
+    tar -C /opt -xzf /tmp/nvim.tar.gz; \
+    rm /tmp/nvim.tar.gz; \
+    ln -sfn "/opt/nvim-linux-${nvim_arch}/bin/nvim" /usr/local/bin/nvim; \
+    nvim --version | head -n 1
+
+# Kickstart's current config uses Neovim's built-in vim.pack and expects the
+# tree-sitter CLI. Seed the config in the image; entrypoint copies it to
+# persistent storage only on first use so user edits are never overwritten.
+RUN npm install --global tree-sitter-cli \
+    && tree-sitter --version \
+    && git clone --depth 1 https://github.com/nvim-lua/kickstart.nvim.git /opt/kickstart.nvim \
+    && test -f /opt/kickstart.nvim/init.lua
 
 # Install OMP in an image-owned path. Persistent mounts cannot hide it.
 WORKDIR /opt/omp

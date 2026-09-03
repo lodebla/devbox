@@ -12,6 +12,7 @@ Un solo container `omp-devbox` contiene:
 - `orca-cli/orca`;
 - `rg`, Git, `gh`, Git LFS;
 - Bun, Node/npm, Python, Go e build tools;
+- Vim completo + Neovim stable con configurazione Kickstart.nvim persistente;
 - Chromium;
 - Chrome DevTools MCP per dare a OMP accesso allo stesso Chromium;
 - Xvfb + Openbox per il display virtuale;
@@ -210,6 +211,43 @@ browser-service status
 ```
 
 ---
+
+
+## 7.5 Vim e Neovim con Kickstart.nvim
+
+L'immagine include `vim` completo e installa Neovim dalla release **stable ufficiale** al momento del build, invece di usare la versione spesso arretrata dei repository Debian. Include anche le dipendenze richieste dal Kickstart corrente: `git`, `make`, compilatore C/C++, `ripgrep`, `fd`, `tree-sitter` CLI, `unzip`, Node/npm e `xclip`.
+
+Il repo `nvim-lua/kickstart.nvim` viene clonato nell'immagine come seed. Al primo avvio del container viene copiato in:
+
+```text
+/persist/nvim
+```
+
+e collegato a:
+
+```text
+/persist/config/nvim -> /persist/nvim
+```
+
+Poiché `XDG_CONFIG_HOME=/persist/config`, `nvim` usa automaticamente quella configurazione. Le modifiche che fai a `init.lua` restano quindi sul volume `/persist` anche quando aggiorni o ricrei il container. Se esiste già una configurazione Neovim in `/persist/config/nvim`, l'entrypoint la lascia intatta.
+
+Verifica:
+
+```bash
+vim --version | head -n 1
+nvim --version | head -n 1
+fd --version
+tree-sitter --version
+readlink /persist/config/nvim
+```
+
+Al primo avvio di:
+
+```bash
+nvim
+```
+
+Kickstart usa il package manager integrato `vim.pack` del Neovim corrente per scaricare/configurare i plugin. I successivi rebuild dell'immagine non sovrascrivono la tua configurazione persistente.
 
 ## 8. Primo login OMP sul server
 

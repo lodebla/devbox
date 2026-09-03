@@ -10,7 +10,7 @@ services:
       TZ: Europe/Rome
       PUID: "1000"
       PGID: "1000"
-      DEVBOX_AUTHORIZED_KEYS: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHpki+FI0wCIT4Vj+I18h1EArojS+c5GOhpRIEa1RYUX omp-devbox"
+      DEVBOX_AUTHORIZED_KEYS: "REPLACE_WITH_YOUR_SSH_PUBLIC_KEY"
       # Optional. Leave empty and run `browser-gui password` once over SSH.
       DEVBOX_VNC_PASSWORD: ""
       # Optional: set this if you expose noVNC through Cloudflare Access.

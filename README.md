@@ -6,6 +6,7 @@ Persistent coding workstation designed for a ZimaOS server:
 - Oh My Pi (OMP)
 - `orca-cli/orca`
 - `rg`, Git, `gh`, Git LFS
+- Vim + latest stable Neovim with persistent Kickstart.nvim configuration
 - Bun, Node/npm, Python, Go, build tools
 - persistent Chromium on Xvfb
 - OMP connected to the shared Chromium through Chrome DevTools MCP
@@ -43,11 +44,29 @@ devbox-health
 browser-service status
 browser-gui start
 browser-gui stop
+vim README.md
+nvim README.md
 omp-session start myproject /workspace/myproject
 omp-session attach myproject
 omp-session capture myproject 200
 omp-session send myproject "run the tests"
 ```
+
+## Vim / Neovim
+
+The image includes full `vim` plus the latest stable Neovim from the official release tarball. Kickstart.nvim is seeded from `nvim-lua/kickstart.nvim` at image build time.
+
+On first container start, Kickstart is copied to `/persist/nvim` and exposed to Neovim as `/persist/config/nvim` (the container uses `XDG_CONFIG_HOME=/persist/config`). Existing Neovim configuration is never overwritten. Plugin/data state lives under the already-persistent XDG data directory.
+
+Useful checks:
+
+```bash
+vim --version | head -n 1
+nvim --version | head -n 1
+readlink /persist/config/nvim
+```
+
+Kickstart installs its configured plugins on first `nvim` launch.
 
 ## OMP configuration sync
 

@@ -64,4 +64,20 @@ pass "persistent directory ownership and SSH-safe permissions"
 
 bash tests/test_sync_import.sh
 
+
+# Neovim/Kickstart dev environment.
+grep -Eq '(^|[[:space:]])vim([[:space:]\\]|$)' Dockerfile || fail "full vim package is not installed"
+grep -q 'nvim-linux-' Dockerfile || fail "Neovim stable tarball installation missing"
+grep -q 'tree-sitter-cli' Dockerfile || fail "tree-sitter CLI dependency missing"
+grep -q 'fd-find' Dockerfile || fail "fd dependency missing"
+grep -q 'nvim-lua/kickstart.nvim' Dockerfile || fail "Kickstart.nvim seed is not installed in image"
+grep -q '/persist/nvim' bin/entrypoint || fail "persistent Neovim config directory missing"
+grep -q '/persist/config/nvim' bin/entrypoint || fail "Neovim XDG config link missing"
+grep -q '/opt/kickstart.nvim' bin/entrypoint || fail "Kickstart first-boot initialization missing"
+pass "Neovim + persistent Kickstart wiring"
+grep -q 'Verify Vim and Neovim Kickstart' .github/workflows/build-image.yml || fail "CI does not smoke-test Vim/Neovim"
+grep -q 'nvim --version' .github/workflows/build-image.yml || fail "CI does not verify Neovim binary"
+grep -q '/persist/config/nvim' .github/workflows/build-image.yml || fail "CI does not verify persistent Kickstart config"
+pass "CI verifies Vim + Neovim/Kickstart"
+
 echo "All static tests passed."

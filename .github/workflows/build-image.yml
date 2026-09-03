@@ -54,6 +54,13 @@ jobs:
           done
           docker logs omp-devbox-smoke
           exit 1
+      - name: Verify Vim and Neovim Kickstart
+        run: |
+          docker exec -u dev omp-devbox-smoke bash -lc 'vim --version | head -n 1'
+          docker exec -u dev omp-devbox-smoke bash -lc 'nvim --version | head -n 1'
+          docker exec -u dev omp-devbox-smoke bash -lc 'fd --version'
+          docker exec -u dev omp-devbox-smoke bash -lc 'tree-sitter --version'
+          docker exec -u dev omp-devbox-smoke bash -lc 'test -L /persist/config/nvim && test "$(readlink /persist/config/nvim)" = /persist/nvim && test -f /persist/nvim/init.lua'
       - name: Verify browser isolation and optional GUI
         run: |
           docker exec -u dev omp-devbox-smoke bash -lc 'curl -fsS http://127.0.0.1:9222/json/version >/dev/null'

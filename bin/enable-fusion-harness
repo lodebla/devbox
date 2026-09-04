@@ -1,0 +1,86 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+home="${HOME:-/home/dev}"
+omp_root="${OMP_HOME:-$home/.omp}"
+agent_dir="${OMP_AGENT_DIR:-$omp_root/agent}"
+config_path="${DEVBOX_FH_CONFIG_PATH:-$agent_dir/config.yml}"
+stack_dir="${DEVBOX_FH_STACK_DIR:-$agent_dir/fusion-harness}"
+extension_path="${DEVBOX_FH_EXTENSION_PATH:-/opt/omp/fusion-harness/fusion-harness.ts}"
+provider_path="${DEVBOX_FH_PROVIDER_PATH:-/opt/omp/node_modules/pi-commandcode-provider/index.ts}"
+stack_source="${DEVBOX_FH_STACK_SOURCE:-/etc/devbox/fusion-harness/model-stack-trio.yaml}"
+
+[[ -f "$extension_path" ]] || { printf 'Fusion Harness extension not found: %s\n' "$extension_path" >&2; exit 2; }
+[[ -f "$stack_source" ]] || { printf 'Fusion Harness stack seed not found: %s\n' "$stack_source" >&2; exit 2; }
+
+mkdir -p "$(dirname "$config_path")" "$stack_dir"
+
+CONFIG_PATH="$config_path" EXTENSION_PATH="$extension_path" PROVIDER_PATH="$provider_path" python3 - <<'PY'
+import os
+import re
+from pathlib import Path
+
+config_path = Path(os.environ["CONFIG_PATH"])
+extension_path = os.environ["EXTENSION_PATH"]
+provider_path = os.environ["PROVIDER_PATH"]
+required = [extension_path]
+if Path(provider_path).is_file():
+    required.insert(0, provider_path)
+
+def is_managed_extension(line: str) -> bool:
+    value = line.strip()
+    if not value.startswith("-"):
+        return False
+    value = value[1:].strip()
+    if " #" in value:
+        value = value.split(" #", 1)[0].rstrip()
+    value = value.strip("'\"")
+    return (
+        value.endswith("fusion-harness.ts")
+        or value == "npm:pi-commandcode-provider"
+        or value.endswith("/pi-commandcode-provider/index.ts")
+    )
+
+def add_required_extensions(lines: list[str]) -> list[str]:
+    key_index = next((i for i, line in enumerate(lines) if re.match(r"^extensions:\s*", line)), None)
+    if key_index is None:
+        if lines and lines[-1].strip():
+            lines.append("\n")
+        lines.extend(["extensions:\n", *[f"  - {path}\n" for path in required]])
+        return lines
+
+    key_line = lines[key_index]
+    suffix = key_line.split(":", 1)[1].split("#", 1)[0].strip()
+    if suffix not in ("", "[]"):
+        raise SystemExit(f"unsupported inline extensions setting in {config_path}; convert it to a YAML list first")
+    if suffix == "[]":
+        lines[key_index] = "extensions:\n"
+
+    end = key_index + 1
+    while end < len(lines):
+        line = lines[end]
+        if line and not line[0].isspace() and not line.lstrip().startswith("#"):
+            break
+        end += 1
+
+    body = lines[key_index + 1 : end]
+    body = [line for line in body if not is_managed_extension(line)]
+    lines[key_index + 1 : end] = [*[f"  - {path}\n" for path in required], *body]
+    return lines
+
+if config_path.exists():
+    lines = config_path.read_text(encoding="utf-8").splitlines(keepends=True)
+else:
+    lines = []
+
+updated = add_required_extensions(lines)
+config_path.write_text("".join(updated), encoding="utf-8")
+PY
+
+stack_path="$stack_dir/model-stack-trio.yaml"
+if [[ ! -f "$stack_path" ]]; then
+  cp "$stack_source" "$stack_path"
+fi
+
+printf 'Fusion Harness enabled: %s\n' "$extension_path"
+printf 'Fusion Harness stack: %s\n' "$stack_path"

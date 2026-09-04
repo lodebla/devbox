@@ -61,6 +61,13 @@ jobs:
           docker exec -u dev omp-devbox-smoke bash -lc 'fd --version'
           docker exec -u dev omp-devbox-smoke bash -lc 'tree-sitter --version'
           docker exec -u dev omp-devbox-smoke bash -lc 'test -L /persist/config/nvim && test "$(readlink /persist/config/nvim)" = /persist/nvim && test -f /persist/nvim/init.lua'
+      - name: Verify Fusion Harness OMP integration
+        run: |
+          docker exec -u dev omp-devbox-smoke bash -lc 'test -f /opt/omp/fusion-harness/fusion-harness.ts'
+          docker exec -u dev omp-devbox-smoke bash -lc 'test -f /opt/omp/node_modules/pi-commandcode-provider/index.ts'
+          docker exec -u dev omp-devbox-smoke bash -lc 'test -f /home/dev/.omp/agent/fusion-harness/model-stack-trio.yaml'
+          docker exec -u dev omp-devbox-smoke bash -lc 'grep -Fqx "  - /opt/omp/fusion-harness/fusion-harness.ts" /home/dev/.omp/agent/config.yml'
+          docker exec -u dev omp-devbox-smoke bash -lc 'grep -Fqx "  - /opt/omp/node_modules/pi-commandcode-provider/index.ts" /home/dev/.omp/agent/config.yml'
       - name: Verify browser isolation and optional GUI
         run: |
           docker exec -u dev omp-devbox-smoke bash -lc 'curl -fsS http://127.0.0.1:9222/json/version >/dev/null'

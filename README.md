@@ -13,6 +13,9 @@ Persistent coding workstation designed for a ZimaOS server:
 - optional noVNC GUI (`browser-gui start` / `stop`)
 - sanitized local → server OMP config sync
 - helper commands for persistent OMP/tmux sessions
+- Fusion Harness multi-model orchestration integrated with OMP
+- automatic Command Code provider and stack seeding
+- deterministic Fusion Harness compatibility tests
 
 The daily workflow does **not** require Docker or root access on the ZimaOS host after the initial Custom App installation.
 
@@ -51,6 +54,41 @@ omp-session attach myproject
 omp-session capture myproject 200
 omp-session send myproject "run the tests"
 ```
+
+## Fusion Harness in OMP
+
+The image ships the OMP-compatible Fusion Harness extension at
+`/opt/omp/fusion-harness/fusion-harness.ts`, installs the
+`pi-commandcode-provider` plugin, and seeds the persistent default stack at
+`~/.omp/agent/fusion-harness/model-stack-trio.yaml` on first boot. Existing
+OMP extensions and an existing stack are preserved. After `sync-omp-import`,
+the container-local extension path is restored automatically.
+
+Inside `omp`:
+
+```text
+/fh
+/fh on
+/fh-system-prompt
+/fh-only <slot> <prompt>
+/fh-opinion <prompt>
+/fh-fusion "<research prompt>" "<merge instruction>"
+/fh-debate [--rounds N] <prompt>
+/fh-collaborate <prompt>
+/fh-model
+/fh-reset
+```
+
+Edit the persistent stack after checking the models available to the
+authenticated OMP account:
+
+```bash
+omp models --json
+$EDITOR ~/.omp/agent/fusion-harness/model-stack-trio.yaml
+```
+
+See [`docs/fusion-harness-omp.md`](docs/fusion-harness-omp.md) for the
+provider, authentication, child-compatibility, and smoke-test details.
 
 ## Vim / Neovim
 

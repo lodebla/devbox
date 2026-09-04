@@ -5,7 +5,7 @@ cd "$(dirname "$0")/.."
 fail() { echo "FAIL: $*" >&2; exit 1; }
 pass() { echo "PASS: $*"; }
 
-for f in Dockerfile config/sshd_config config/omp-server.yml config/omp-devbox-mcp.json bin/entrypoint bin/browser-service bin/browser-gui bin/omp-sync-import sync/sync-omp.sh sync/sync-omp.ps1 zimaos-compose.yml GUIDA-ZIMAOS.md; do
+for f in Dockerfile package.json bun.lock config/sshd_config config/omp-server.yml config/omp-devbox-mcp.json config/fusion-harness/model-stack-trio.yaml bin/entrypoint bin/enable-fusion-harness bin/browser-service bin/browser-gui bin/omp-sync-import sync/sync-omp.sh sync/sync-omp.ps1 extensions/fusion-harness/fusion-harness.ts tests/test_fusion_harness.sh zimaos-compose.yml GUIDA-ZIMAOS.md docs/fusion-harness-omp.md; do
   [[ -f "$f" ]] || fail "missing $f"
 done
 pass "required files exist"
@@ -18,10 +18,11 @@ grep -Fq "usermod --password '*' dev" Dockerfile || fail "dev account is left lo
 ! grep -q 'groupadd --gid 1000 dev' Dockerfile || fail "Dockerfile tries to recreate occupied GID 1000"
 pass "base node UID/GID reuse and SSH account state"
 
-for f in bin/entrypoint bin/browser-service bin/browser-gui bin/omp-sync-import bin/devbox-health bin/omp-session bin/omp-raw bin/omp-update bin/orca-update sync/sync-omp.sh tests/test_static.sh; do
+for f in bin/entrypoint bin/enable-fusion-harness bin/browser-service bin/browser-gui bin/omp-sync-import bin/devbox-health bin/omp-session bin/omp-raw bin/omp-update bin/orca-update sync/sync-omp.sh tests/test_fusion_harness.sh tests/test_static.sh; do
   bash -n "$f" || fail "bash syntax: $f"
 done
 pass "bash syntax"
+grep -Fq '"yaml": "2.9.0"' package.json || fail "Fusion Harness test dependency is not pinned"
 
 ! grep -Eq '(^|["[:space:]])9222:9222' zimaos-compose.yml || fail "CDP 9222 must not be published"
 ! grep -Eq "published:[[:space:]]*['\"]?9222" zimaos-compose.yml || fail "CDP 9222 must not be published"
@@ -69,6 +70,10 @@ bash tests/test_sync_import.sh
 grep -Eq '(^|[[:space:]])vim([[:space:]\\]|$)' Dockerfile || fail "full vim package is not installed"
 grep -q 'nvim-linux-' Dockerfile || fail "Neovim stable tarball installation missing"
 grep -q 'tree-sitter-cli' Dockerfile || fail "tree-sitter CLI dependency missing"
+grep -q '^ARG TREE_SITTER_CLI_VERSION=0.25.10' Dockerfile || fail "tree-sitter CLI must stay pinned to the Debian-compatible release"
+grep -q 'tree-sitter-cli@${TREE_SITTER_CLI_VERSION}' Dockerfile || fail "Dockerfile does not use the pinned tree-sitter CLI version"
+grep -q '^ARG TARGETARCH' Dockerfile || fail "Dockerfile does not declare the build architecture argument"
+pass "tree-sitter CLI is pinned for Debian bookworm glibc"
 grep -q 'fd-find' Dockerfile || fail "fd dependency missing"
 grep -q 'nvim-lua/kickstart.nvim' Dockerfile || fail "Kickstart.nvim seed is not installed in image"
 grep -q '/persist/nvim' bin/entrypoint || fail "persistent Neovim config directory missing"
@@ -79,5 +84,16 @@ grep -q 'Verify Vim and Neovim Kickstart' .github/workflows/build-image.yml || f
 grep -q 'nvim --version' .github/workflows/build-image.yml || fail "CI does not verify Neovim binary"
 grep -q '/persist/config/nvim' .github/workflows/build-image.yml || fail "CI does not verify persistent Kickstart config"
 pass "CI verifies Vim + Neovim/Kickstart"
+grep -q 'Verify Fusion Harness OMP integration' .github/workflows/build-image.yml || fail "CI does not smoke-test Fusion Harness"
+grep -q '/opt/omp/fusion-harness/fusion-harness.ts' .github/workflows/build-image.yml || fail "CI does not verify the image-owned Fusion Harness extension"
+grep -q 'COPY extensions/fusion-harness /opt/omp/fusion-harness' Dockerfile || fail "Fusion Harness source is not copied into the image"
+grep -q 'model-stack-trio.yaml /etc/devbox/fusion-harness/model-stack-trio.yaml' Dockerfile || fail "Fusion Harness stack seed is not copied into the image"
+grep -q 'pi-commandcode-provider@' Dockerfile || fail "Command Code provider is not installed in the image"
+grep -q 'yaml@' Dockerfile || fail "YAML runtime dependency is not installed in the image"
+grep -q 'enable-fusion-harness' bin/entrypoint || fail "Fusion Harness is not enabled at container boot"
+grep -q 'enable-fusion-harness' bin/omp-sync-import || fail "Fusion Harness is not restored after OMP sync"
+pass "Fusion Harness image and persistence wiring"
+
+bash tests/test_fusion_harness.sh
 
 echo "All static tests passed."

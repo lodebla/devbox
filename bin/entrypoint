@@ -72,6 +72,11 @@ link_persist /home/dev/.orca /persist/orca
 link_persist /home/dev/.ssh /persist/ssh
 link_persist /home/dev/.config /persist/config
 
+# Keep the image-owned Fusion Harness available in every OMP session. The
+# helper appends the container paths without overwriting user extensions and
+# seeds the default stack only when the persistent copy is absent.
+gosu dev env HOME=/home/dev OMP_HOME=/home/dev/.omp /usr/local/bin/enable-fusion-harness
+
 # Neovim config is kept separately so it can be customized and retained across
 # image/container rebuilds without mixing the Kickstart git checkout with other
 # XDG config. Respect a pre-existing nvim config instead of overwriting it.

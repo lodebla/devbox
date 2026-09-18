@@ -17,7 +17,7 @@ Un solo container `omp-devbox` contiene:
 - Chrome DevTools MCP per dare a OMP accesso allo stesso Chromium;
 - Xvfb + Openbox per il display virtuale;
 - x11vnc + noVNC, ma **spenti normalmente**;
-- helper `browser-service`, `browser-gui`, `omp-session`, `omp-sync-import`, `devbox-health`.
+- helper `browser-service`, `browser-gui`, `enable-fusion-harness`, `omp-session`, `omp-sync-import`, `devbox-health`.
 
 Persistono fuori dal container:
 
@@ -217,6 +217,11 @@ browser-service status
 
 L'immagine include `vim` completo e installa Neovim dalla release **stable ufficiale** al momento del build, invece di usare la versione spesso arretrata dei repository Debian. Include anche le dipendenze richieste dal Kickstart corrente: `git`, `make`, compilatore C/C++, `ripgrep`, `fd`, `tree-sitter` CLI, `unzip`, Node/npm e `xclip`.
 
+Il CLI `tree-sitter` è fissato a `0.25.10`: le release più recenti richiedono
+`GLIBC_2.39`, mentre `node:24-bookworm` fornisce `glibc 2.36`. Senza il pin,
+la fase `npm install --global tree-sitter-cli` può installare un binario che
+poi non parte nel container.
+
 Il repo `nvim-lua/kickstart.nvim` viene clonato nell'immagine come seed. Al primo avvio del container viene copiato in:
 
 ```text
@@ -270,6 +275,47 @@ browser-gui start
 per vedere il Chromium del server.
 
 OMP salva le proprie credenziali server-side in `/persist/omp`, quindi sopravvivono alla ricreazione del container.
+
+### Fusion Harness incluso nell'immagine
+
+L'immagine abilita automaticamente l'estensione OMP-compatibile:
+
+```text
+/opt/omp/fusion-harness/fusion-harness.ts
+```
+
+e installa il plugin `pi-commandcode-provider` insieme alla dipendenza YAML
+usata dal parser dello stack. Al primo avvio, se non esiste già, viene
+copiato in `/persist/omp/agent/fusion-harness/model-stack-trio.yaml` lo stack
+di esempio incluso nell'immagine. Se hai già un tuo stack, non viene
+sovrascritto.
+
+Dentro OMP sono quindi disponibili:
+
+```text
+/fh
+/fh on
+/fh-system-prompt
+/fh-only <slot> <prompt>
+/fh-opinion <prompt>
+/fh-fusion "<ricerca>" "<istruzione di merge>"
+/fh-debate [--rounds N] <prompt>
+/fh-collaborate <prompt>
+/fh-model
+/fh-reset
+```
+
+Controlla i modelli realmente disponibili e modifica lo stack persistente:
+
+```bash
+omp models --json
+$EDITOR ~/.omp/agent/fusion-harness/model-stack-trio.yaml
+```
+
+L'helper rimuove anche eventuali vecchi riferimenti alla checkout locale di
+Fusion Harness dopo una sincronizzazione e mantiene il percorso interno
+`/opt/omp/fusion-harness`. Il codice completo e le verifiche deterministiche
+sono in `extensions/fusion-harness/` e `tests/test_fusion_harness.sh`.
 
 ---
 

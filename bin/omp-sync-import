@@ -46,6 +46,12 @@ while IFS= read -r -d '' package_json; do
   bun install --cwd "$plugin_dir"
 done < <(find "$dst" -type f -path '*/plugins/package.json' -not -path '*/node_modules/*' -print0 2>/dev/null)
 
+if [[ -x /usr/local/bin/enable-fusion-harness \
+      && -f /opt/omp/fusion-harness/fusion-harness.ts \
+      && -f /etc/devbox/fusion-harness/model-stack-trio.yaml ]]; then
+  /usr/local/bin/enable-fusion-harness
+fi
+
 chmod -R u+rwX,go-rwx "$dst" 2>/dev/null || true
 
 echo "OMP configuration synchronized."

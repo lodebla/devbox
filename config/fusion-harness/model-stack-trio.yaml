@@ -1,0 +1,16 @@
+- name: ari
+  model: openai-codex/gpt-5.6-sol
+  thinking: high
+  architect: true
+  color: "#A78BFA"
+
+- name: kate
+  model: commandcode/z-ai/glm-5.3-flash
+  thinking: high
+  primary: true
+  color: "#F59E0B"
+
+- name: athena
+  model: commandcode/deepseek/deepseek-v4-flash
+  thinking: max
+  color: "#22D3EE"

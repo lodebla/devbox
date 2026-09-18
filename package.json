@@ -1,0 +1,10 @@
+{
+  "name": "devbox-fusion-harness",
+  "private": true,
+  "scripts": {
+    "test:fusion-harness": "bun test extensions/fusion-harness/tests"
+  },
+  "dependencies": {
+    "yaml": "2.9.0"
+  }
+}

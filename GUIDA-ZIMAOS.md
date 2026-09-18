@@ -359,6 +359,8 @@ Quindi la sincronizzazione può continuare a sostituire la tua `~/.omp` con quel
 
 ## 10. Usa OMP con tmux
 
+Il devbox configura tmux con `mouse on` e true color per `xterm-256color` (Termius). Su telefono puoi quindi scorrere lo storico con lo swipe/scroll senza entrare manualmente in copy-mode con `Ctrl+B` poi `[`. La configurazione vive in `/persist/config/tmux/tmux.conf` ed è collegata a `~/.tmux.conf`, quindi sopravvive alla ricreazione del container.
+
 Puoi usare tmux normalmente:
 
 ```bash
@@ -744,3 +746,12 @@ Questo ricrea link/dipendenze usando Linux senza dover copiare i binari dal PC.
 ### Directory `/workspace` non scrivibile
 
 Se stai montando una cartella preesistente, imposta `PUID` e `PGID` nel Compose uguali all'owner dei file oppure usa inizialmente la directory dedicata `/DATA/AppData/omp-devbox/workspace`.
+
+### SSH keys persistenti
+
+`DEVBOX_AUTHORIZED_KEYS` viene usata come chiave bootstrap: all'avvio viene aggiunta a `/persist/ssh/authorized_keys` solo se manca. Il file non viene più sovrascritto, quindi eventuali chiavi aggiunte manualmente (per esempio Termius) restano presenti dopo restart o ricreazioni del container, purché `/persist` sia montato sul volume persistente.
+
+
+## Codex CLI persistente
+
+L'immagine include Codex CLI e mantiene `~/.codex` in `/persist/codex`. `/opt/omp` e `/opt/npm-global` sono scrivibili da `dev`, così gli update di OMP/Codex non falliscono con errori `EACCES`. Dopo un rebuild puoi verificare con `omp --version`, `codex --version`, `locale`, e `tmux show -g mouse`.

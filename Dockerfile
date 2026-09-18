@@ -3,6 +3,7 @@
 ARG BUN_VERSION=1.3.14
 ARG NODE_MAJOR=24
 ARG CHROME_DEVTOOLS_MCP_VERSION=1.6.0
+ARG CODEX_VERSION=latest
 
 FROM golang:bookworm AS orca-builder
 RUN mkdir -p /out && GOBIN=/out go install github.com/orca-cli/orca/cmd/orca@latest
@@ -13,9 +14,12 @@ FROM node:${NODE_MAJOR}-bookworm
 
 ARG OMP_VERSION=latest
 ARG CHROME_DEVTOOLS_MCP_VERSION
+ARG CODEX_VERSION
 ARG TARGETARCH
 ENV DEBIAN_FRONTEND=noninteractive \
     TZ=Europe/Rome \
+    LANG=C.utf8 \
+    LC_ALL=C.utf8 \
     DISPLAY=:99 \
     XDG_CONFIG_HOME=/persist/config \
     XDG_DATA_HOME=/persist/data \
@@ -24,7 +28,8 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium \
     CHROME_USER_DATA_DIR=/persist/chromium \
     CHROME_DEVTOOLS_MCP_NO_UPDATE_CHECKS=1 \
-    PATH=/opt/omp/node_modules/.bin:/usr/local/go/bin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    NPM_CONFIG_PREFIX=/opt/npm-global \
+    PATH=/opt/npm-global/bin:/opt/omp/node_modules/.bin:/usr/local/go/bin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 COPY --from=bun-source /usr/local/bin/bun /usr/local/bin/bun
 COPY --from=orca-builder /usr/local/go /usr/local/go
@@ -40,7 +45,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       dbus-x11 xdg-utils fonts-liberation fonts-dejavu-core \
       procps iproute2 lsof less nano vim \
     && rm -rf /var/lib/apt/lists/* \
-    && mkdir -p /run/sshd /opt/omp /etc/devbox \
+    && mkdir -p /run/sshd /opt/omp /opt/npm-global /etc/devbox \
     && ln -sf /usr/bin/fdfind /usr/local/bin/fd
 
 # Kickstart.nvim tracks the latest stable Neovim. Debian stable is normally
@@ -74,8 +79,11 @@ RUN printf '{"private":true}\n' > package.json \
 
 # OMP currently reaches the shared graphical Chromium through MCP. Pin the MCP
 # package in the image so sessions do not download a moving `latest` at runtime.
-RUN npm install --global "chrome-devtools-mcp@${CHROME_DEVTOOLS_MCP_VERSION}" \
-    && chrome-devtools-mcp --help >/dev/null
+RUN npm install --global \
+      "chrome-devtools-mcp@${CHROME_DEVTOOLS_MCP_VERSION}" \
+      "@openai/codex@${CODEX_VERSION}" \
+    && chrome-devtools-mcp --help >/dev/null \
+    && codex --version
 
 COPY --from=orca-builder /out/orca /usr/local/bin/orca
 
@@ -87,11 +95,13 @@ RUN groupmod --new-name dev node \
     && usermod --login dev --home /home/dev --move-home --shell /bin/bash --gid dev node \
     && usermod --password '*' dev \
     && printf 'dev ALL=(ALL) NOPASSWD:ALL\n' > /etc/sudoers.d/devbox \
-    && chmod 0440 /etc/sudoers.d/devbox
+    && chmod 0440 /etc/sudoers.d/devbox \
+    && chown -R dev:dev /opt/omp /opt/npm-global
 
 COPY config/sshd_config /etc/ssh/sshd_config
 COPY config/omp-server.yml /etc/devbox/omp-server.yml
 COPY config/omp-devbox-mcp.json /etc/devbox/omp-devbox-mcp.json
+COPY config/tmux.conf /etc/devbox/tmux.conf
 COPY bin/ /usr/local/bin/
 RUN chmod +x /usr/local/bin/browser-service \
              /usr/local/bin/browser-gui \

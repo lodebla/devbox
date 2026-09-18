@@ -3,7 +3,9 @@
 Persistent coding workstation designed for a ZimaOS server:
 
 - SSH + tmux
+- tmux mouse scrolling + true-color defaults for mobile terminals (Termius)
 - Oh My Pi (OMP)
+- OpenAI Codex CLI with persistent `~/.codex` auth/config
 - `orca-cli/orca`
 - `rg`, Git, `gh`, Git LFS
 - Vim + latest stable Neovim with persistent Kickstart.nvim configuration
@@ -68,6 +70,17 @@ readlink /persist/config/nvim
 
 Kickstart installs its configured plugins on first `nvim` launch.
 
+
+## OMP e Codex aggiornabili
+
+`/opt/omp` e il prefix npm globale `/opt/npm-global` sono assegnati all'utente `dev`, quindi gli updater lanciati dalla sessione normale non falliscono con `EACCES`. Codex è installato nell'immagine come `@openai/codex`; il suo stato/login vive in `/persist/codex` tramite `~/.codex`, quindi sopravvive alle ricreazioni del container.
+
+Per il login Codex puoi usare:
+
+```bash
+codex login --device-auth
+```
+
 ## OMP configuration sync
 
 Linux/macOS/WSL:
@@ -87,3 +100,7 @@ The sync intentionally excludes authentication DBs, session history, secrets and
 ## Installation
 
 Follow **[GUIDA-ZIMAOS.md](GUIDA-ZIMAOS.md)**. It includes image publishing, ZimaOS Custom App import, SSH, browser GUI, OMP sync and Hermes integration.
+
+### SSH keys persistenti
+
+`DEVBOX_AUTHORIZED_KEYS` viene usata come chiave bootstrap: all'avvio viene aggiunta a `/persist/ssh/authorized_keys` solo se manca. Il file non viene più sovrascritto, quindi eventuali chiavi aggiunte manualmente (per esempio Termius) restano presenti dopo restart o ricreazioni del container, purché `/persist` sia montato sul volume persistente.

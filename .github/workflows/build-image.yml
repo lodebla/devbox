@@ -54,6 +54,13 @@ jobs:
           done
           docker logs omp-devbox-smoke
           exit 1
+      - name: Verify OMP and Codex dev tooling
+        run: |
+          docker exec -u dev omp-devbox-smoke bash -lc 'omp --version'
+          docker exec -u dev omp-devbox-smoke bash -lc 'codex --version'
+          docker exec -u dev omp-devbox-smoke bash -lc 'test -w /opt/omp/package.json'
+          docker exec -u dev omp-devbox-smoke bash -lc 'test -w /opt/npm-global && test "$(npm prefix -g)" = /opt/npm-global'
+          docker exec -u dev omp-devbox-smoke bash -lc 'test -L ~/.codex && test "$(readlink ~/.codex)" = /persist/codex'
       - name: Verify Vim and Neovim Kickstart
         run: |
           docker exec -u dev omp-devbox-smoke bash -lc 'vim --version | head -n 1'
@@ -61,6 +68,11 @@ jobs:
           docker exec -u dev omp-devbox-smoke bash -lc 'fd --version'
           docker exec -u dev omp-devbox-smoke bash -lc 'tree-sitter --version'
           docker exec -u dev omp-devbox-smoke bash -lc 'test -L /persist/config/nvim && test "$(readlink /persist/config/nvim)" = /persist/nvim && test -f /persist/nvim/init.lua'
+      - name: Verify tmux mobile defaults
+        run: |
+          docker exec -u dev omp-devbox-smoke bash -lc 'test -L ~/.tmux.conf && grep -Fq "set -g mouse on" ~/.tmux.conf'
+          docker exec -u dev omp-devbox-smoke bash -lc 'grep -Fq "set -as terminal-features '"'"',xterm-256color:RGB'"'"'" ~/.tmux.conf'
+          docker exec -u dev omp-devbox-smoke bash -lc 'test "$LANG" = C.utf8 && test "$LC_ALL" = C.utf8'
       - name: Verify browser isolation and optional GUI
         run: |
           docker exec -u dev omp-devbox-smoke bash -lc 'curl -fsS http://127.0.0.1:9222/json/version >/dev/null'

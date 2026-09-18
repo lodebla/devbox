@@ -58,6 +58,17 @@ pass "sync reinstalls OMP plugins"
 grep -q 'PI_CONFIG_FILES=/etc/devbox/omp-server.yml' Dockerfile || fail "server config overlay env missing"
 pass "server overlay separation"
 
+# OMP and Codex must remain writable/available to the non-root dev user.
+grep -q 'NPM_CONFIG_PREFIX=/opt/npm-global' Dockerfile || fail "user-writable npm global prefix missing"
+grep -q '@openai/codex' Dockerfile || fail "Codex CLI is not installed in the image"
+grep -q 'chown -R dev:dev /opt/omp /opt/npm-global' Dockerfile || fail "OMP/Codex install roots are not handed to dev"
+grep -q 'link_persist /home/dev/.codex /persist/codex' bin/entrypoint || fail "Codex auth/config is not persisted"
+grep -Fq 'for tool_root in /opt/omp /opt/npm-global; do' bin/entrypoint || fail "runtime OMP ownership repair missing"
+grep -q 'Verify OMP and Codex dev tooling' .github/workflows/build-image.yml || fail "CI does not smoke-test OMP/Codex dev tooling"
+grep -q 'codex --version' .github/workflows/build-image.yml || fail "CI does not verify Codex CLI"
+grep -q 'test -w /opt/omp/package.json' .github/workflows/build-image.yml || fail "CI does not verify OMP is writable by dev"
+pass "OMP update permissions + persistent Codex CLI"
+
 grep -q 'chown dev:dev /persist /persist/omp' bin/entrypoint || fail "persistent top-level dirs are not repaired each boot"
 grep -q '^chmod 755 /persist$' bin/entrypoint || fail "/persist permissions are unsafe for sshd StrictModes"
 pass "persistent directory ownership and SSH-safe permissions"
@@ -79,5 +90,31 @@ grep -q 'Verify Vim and Neovim Kickstart' .github/workflows/build-image.yml || f
 grep -q 'nvim --version' .github/workflows/build-image.yml || fail "CI does not verify Neovim binary"
 grep -q '/persist/config/nvim' .github/workflows/build-image.yml || fail "CI does not verify persistent Kickstart config"
 pass "CI verifies Vim + Neovim/Kickstart"
+
+# tmux defaults for mobile/Termius use.
+[[ -f config/tmux.conf ]] || fail "missing config/tmux.conf"
+grep -Fq "set -g mouse on" config/tmux.conf || fail "tmux mouse mode is not enabled by default"
+grep -Fq "set -as terminal-features ',xterm-256color:RGB'" config/tmux.conf || fail "tmux RGB capability override missing"
+grep -q "config/tmux.conf /etc/devbox/tmux.conf" Dockerfile || fail "tmux default config is not copied into image"
+grep -q "tmux_dir=/persist/config/tmux" bin/entrypoint || fail "tmux config is not persisted"
+grep -q "/home/dev/.tmux.conf" bin/entrypoint || fail "tmux home config link missing"
+pass "persistent tmux mouse + RGB defaults"
+
+grep -q 'LANG=C.utf8' Dockerfile || fail "UTF-8 locale missing from image environment"
+grep -q '^export LANG=C.utf8$' bin/entrypoint || fail "UTF-8 locale missing from login-shell profile"
+grep -q '^export LC_ALL=C.utf8$' bin/entrypoint || fail "LC_ALL UTF-8 missing from login-shell profile"
+pass "UTF-8 locale defaults"
+
+grep -q 'Verify tmux mobile defaults' .github/workflows/build-image.yml || fail "CI does not smoke-test tmux defaults"
+grep -q 'set -g mouse on' .github/workflows/build-image.yml || fail "CI does not verify tmux mouse mode"
+pass "CI verifies tmux mobile defaults"
+
+# SSH authorized_keys must be merge-safe across container restarts/recreates.
+if grep -Fq 'printf '"'"'%s\n'"'"' "$DEVBOX_AUTHORIZED_KEYS" > /persist/ssh/authorized_keys' bin/entrypoint; then
+  fail "DEVBOX_AUTHORIZED_KEYS overwrites persistent authorized_keys"
+fi
+grep -q 'grep -qxF "\$DEVBOX_AUTHORIZED_KEYS" /persist/ssh/authorized_keys' bin/entrypoint || fail "DEVBOX_AUTHORIZED_KEYS is not deduplicated before append"
+grep -q 'printf .*DEVBOX_AUTHORIZED_KEYS.*>> /persist/ssh/authorized_keys' bin/entrypoint || fail "DEVBOX_AUTHORIZED_KEYS is not appended safely"
+pass "authorized_keys merge-safe persistence"
 
 echo "All static tests passed."

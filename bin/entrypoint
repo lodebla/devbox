@@ -21,9 +21,19 @@ if [[ "$current_uid" != "$PUID" ]]; then
 fi
 chown -R dev:dev /home/dev
 
+# OMP and npm-global tools (Codex, tree-sitter, Chrome DevTools MCP) must be
+# writable by dev so their own update/install flows do not fail with EACCES.
+for tool_root in /opt/omp /opt/npm-global; do
+  if ! gosu dev test -w "$tool_root"; then
+    log "Repairing ownership for $tool_root"
+    chown -R dev:dev "$tool_root"
+  fi
+done
+
 mkdir -p \
   /persist/omp \
   /persist/orca \
+  /persist/codex \
   /persist/ssh \
   /persist/ssh-host-keys \
   /persist/config \
@@ -37,7 +47,7 @@ mkdir -p \
 # when the ownership marker already exists. Keep the directories themselves
 # writable by the non-root dev user on every boot without recursively walking
 # large persistent trees.
-chown dev:dev /persist /persist/omp /persist/orca /persist/ssh /persist/ssh-host-keys \
+chown dev:dev /persist /persist/omp /persist/orca /persist/codex /persist/ssh /persist/ssh-host-keys \
   /persist/config /persist/data /persist/chromium /persist/vnc /persist/nvim /workspace 2>/dev/null || true
 # sshd StrictModes rejects authorized_keys paths that traverse writable parent
 # directories. ZimaOS may create the bind-mounted /persist directory as 0777.
@@ -69,8 +79,26 @@ link_persist() {
 
 link_persist /home/dev/.omp /persist/omp
 link_persist /home/dev/.orca /persist/orca
+link_persist /home/dev/.codex /persist/codex
 link_persist /home/dev/.ssh /persist/ssh
 link_persist /home/dev/.config /persist/config
+
+# Keep tmux configuration persistent across container recreation. On the first
+# boot seed the devbox defaults; if an existing regular ~/.tmux.conf is present,
+# migrate it instead of discarding user changes.
+tmux_dir=/persist/config/tmux
+tmux_config="$tmux_dir/tmux.conf"
+mkdir -p "$tmux_dir"
+if [[ ! -f "$tmux_config" ]]; then
+  if [[ -f /home/dev/.tmux.conf && ! -L /home/dev/.tmux.conf ]]; then
+    cp /home/dev/.tmux.conf "$tmux_config"
+  else
+    cp /etc/devbox/tmux.conf "$tmux_config"
+  fi
+fi
+chown -R dev:dev "$tmux_dir"
+ln -sfn "$tmux_config" /home/dev/.tmux.conf
+chown -h dev:dev /home/dev/.tmux.conf
 
 # Neovim config is kept separately so it can be customized and retained across
 # image/container rebuilds without mixing the Kickstart git checkout with other
@@ -98,7 +126,9 @@ chown dev:dev /home/dev/.cursor
 
 chmod 700 /persist/ssh
 if [[ -n "${DEVBOX_AUTHORIZED_KEYS:-}" ]]; then
-  printf '%s\n' "$DEVBOX_AUTHORIZED_KEYS" > /persist/ssh/authorized_keys
+  touch /persist/ssh/authorized_keys
+  grep -qxF "$DEVBOX_AUTHORIZED_KEYS" /persist/ssh/authorized_keys || \
+    printf '%s\n' "$DEVBOX_AUTHORIZED_KEYS" >> /persist/ssh/authorized_keys
 fi
 if [[ -f /persist/ssh/authorized_keys ]]; then
   chown dev:dev /persist/ssh/authorized_keys
@@ -125,6 +155,8 @@ fi
 
 # Give interactive shells the same server-only settings as the container process.
 cat > /etc/profile.d/devbox.sh <<'PROFILE'
+export LANG=C.utf8
+export LC_ALL=C.utf8
 export DISPLAY=:99
 export XDG_CONFIG_HOME=/persist/config
 export XDG_DATA_HOME=/persist/data
@@ -132,7 +164,8 @@ export GIT_CONFIG_GLOBAL=/persist/gitconfig
 export PI_CONFIG_FILES=/etc/devbox/omp-server.yml
 export PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 export CHROME_USER_DATA_DIR=/persist/chromium
-export PATH=/opt/omp/node_modules/.bin:/usr/local/go/bin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+export NPM_CONFIG_PREFIX=/opt/npm-global
+export PATH=/opt/npm-global/bin:/opt/omp/node_modules/.bin:/usr/local/go/bin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 PROFILE
 chmod 644 /etc/profile.d/devbox.sh
 

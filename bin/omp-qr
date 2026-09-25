@@ -1,0 +1,111 @@
+#!/usr/bin/env bash
+# Print a scannable QR code for an OMP Collab session so a phone can join it
+# without copying the link by hand (terminal wrapping corrupts the write token).
+set -Eeuo pipefail
+
+usage() {
+  cat <<'MSG'
+Usage:
+  omp-qr                 list Collab sessions; show the QR when only one exists
+  omp-qr <target>        show the QR for one session
+  omp-qr --view <target> read-only link instead of full control
+  omp-qr --url <target>  print the plain URL instead of a QR code
+
+<target> is the number shown by the list, a tmux session name (with or
+without the "omp-" prefix), an OMP Collab instance id, or a pid.
+Open the QR from a phone screenshot with Google Lens.
+MSG
+}
+
+access=control
+format=qr
+target=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --view) access=view ;;
+    --url) format=url ;;
+    -h|--help) usage; exit 0 ;;
+    -*) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
+    *) [[ -z "$target" ]] || { echo 'Only one target allowed' >&2; exit 2; }; target="$1" ;;
+  esac
+  shift
+done
+
+hosts_json="$(omp collab list --json)"
+count="$(jq '.hosts | length' <<<"$hosts_json")"
+if [[ "$count" -eq 0 ]]; then
+  echo 'No active Collab sessions. Start OMP (collab.autoStart shares it automatically) or run /collab inside it.' >&2
+  exit 1
+fi
+
+# Map every tmux pane pid to its session name, then resolve each Collab host
+# pid to the tmux session whose pane is one of its ancestors.
+declare -A pane_session=()
+while read -r sess pid; do
+  [[ -n "$pid" ]] && pane_session["$pid"]="$sess"
+done < <(tmux list-panes -a -F '#{session_name} #{pane_pid}' 2>/dev/null || true)
+
+tmux_session_of() {
+  local pid="$1"
+  while [[ -n "$pid" && "$pid" -gt 1 ]]; do
+    if [[ -n "${pane_session[$pid]:-}" ]]; then
+      printf '%s' "${pane_session[$pid]}"
+      return
+    fi
+    pid="$(ps -o ppid= -p "$pid" 2>/dev/null | tr -d ' ')"
+  done
+  printf '%s' '-'
+}
+
+ids=() pids=() sessions=()
+while IFS=$'\t' read -r id pid; do
+  ids+=("$id"); pids+=("$pid"); sessions+=("$(tmux_session_of "$pid")")
+done < <(jq -r '.hosts[] | [.instanceId, (.pid | tostring)] | @tsv' <<<"$hosts_json")
+
+print_list() {
+  local i
+  for i in "${!ids[@]}"; do
+    jq -r --argjson i "$i" --arg n "$((i + 1))" --arg tmux "${sessions[$i]}" '
+      .hosts[$i] as $h
+      | "\($n)) tmux:\($tmux)  \($h.sessionName // "(untitled)")\n   \($h.cwd) · \($h.model.provider)/\($h.model.id) · \(if $h.busy then "working" else "idle" end) · \($h.participants) connected · \($h.access)"
+    ' <<<"$hosts_json"
+  done
+}
+
+index=""
+if [[ -z "$target" ]]; then
+  if [[ "$count" -eq 1 ]]; then
+    index=0
+  else
+    print_list
+    echo
+    echo 'Pick one: omp-qr <number|tmux-session>'
+    exit 0
+  fi
+else
+  for i in "${!ids[@]}"; do
+    if [[ "$target" == "$((i + 1))" || "$target" == "${ids[$i]}" || "$target" == "${pids[$i]}" \
+       || "$target" == "${sessions[$i]}" || "omp-$target" == "${sessions[$i]}" ]]; then
+      index="$i"
+      break
+    fi
+  done
+  if [[ -z "$index" ]]; then
+    echo "No Collab session matches: $target" >&2
+    print_list >&2
+    exit 1
+  fi
+fi
+
+link_args=("${ids[$index]}" --json)
+[[ "$access" == view ]] && link_args+=(--view)
+url="$(omp collab link "${link_args[@]}" | jq -r '.url')"
+
+if [[ "$format" == url ]]; then
+  printf '%s\n' "$url"
+  exit 0
+fi
+
+print_list | sed -n "$((index * 2 + 1)),$((index * 2 + 2))p"
+qrencode -t UTF8 -m 1 -l L "$url"
+echo "$access link · screenshot, then open it with Google Lens"

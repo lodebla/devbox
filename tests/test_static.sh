@@ -18,7 +18,7 @@ grep -Fq "usermod --password '*' dev" Dockerfile || fail "dev account is left lo
 ! grep -q 'groupadd --gid 1000 dev' Dockerfile || fail "Dockerfile tries to recreate occupied GID 1000"
 pass "base node UID/GID reuse and SSH account state"
 
-for f in bin/entrypoint bin/enable-fusion-harness bin/browser-service bin/browser-gui bin/omp-sync-import bin/devbox-health bin/omp-session bin/omp-raw bin/omp-update bin/orca-update sync/sync-omp.sh tests/test_fusion_harness.sh tests/test_static.sh; do
+for f in bin/entrypoint bin/enable-fusion-harness bin/browser-service bin/browser-gui bin/omp-sync-import bin/devbox-health bin/omp-session bin/omp-qr bin/omp-raw bin/omp-update bin/orca-update sync/sync-omp.sh tests/test_fusion_harness.sh tests/test_static.sh; do
   bash -n "$f" || fail "bash syntax: $f"
 done
 pass "bash syntax"

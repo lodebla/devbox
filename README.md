@@ -55,6 +55,8 @@ omp-session start myproject /workspace/myproject
 omp-session attach myproject
 omp-session capture myproject 200
 omp-session send myproject "run the tests"
+omp-session qr myproject      # phone join QR (Collab, full control)
+omp-qr                        # list every shared OMP session / show its QR
 ```
 
 ## Fusion Harness in OMP

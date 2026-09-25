@@ -4,8 +4,9 @@ set -Eeuo pipefail
 usage() {
   cat <<'MSG'
 Usage:
-  omp-session start <name> [directory]
+  omp-session start <name> [directory]   (prints the Collab QR once shared)
   omp-session attach <name>
+  omp-session qr <name> [--view|--url]
   omp-session send <name> <message...>
   omp-session capture <name> [lines]
   omp-session status <name>
@@ -31,11 +32,21 @@ case "$cmd" in
     else
       tmux new-session -d -s "$s" -c "$dir" 'exec omp'
       echo "Started $s in $dir"
+      # collab.autoStart shares the session once its relay connects; wait
+      # briefly so the phone QR is available right away.
+      for _ in $(seq 1 30); do
+        omp-qr "$s" 2>/dev/null && break
+        sleep 1
+      done || true
     fi
     ;;
   attach)
     s="$(session_name "${2:?missing name}")"
     exec tmux attach-session -t "$s"
+    ;;
+  qr)
+    s="$(session_name "${2:?missing name}")"; shift 2
+    exec omp-qr "$@" "$s"
     ;;
   send)
     name="${2:?missing name}"; shift 2; s="$(session_name "$name")"

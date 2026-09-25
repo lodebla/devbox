@@ -4,3 +4,8 @@
 # The shared visible Chromium is exposed to OMP through Chrome DevTools MCP.
 browser:
   enabled: false
+
+# Share every interactive OMP session through Collab with full control so a
+# phone browser can join it. `omp-qr` prints the join QR for any session.
+collab:
+  autoStart: control

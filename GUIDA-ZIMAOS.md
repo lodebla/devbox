@@ -456,6 +456,28 @@ omp-session stop progetto
 
 Questi comandi sono anche molto facili da invocare da Hermes via SSH.
 
+### Controllare OMP dal telefono (Collab)
+
+Ogni sessione interattiva di OMP viene condivisa automaticamente con pieno
+controllo (`collab.autoStart: control` in `/etc/devbox/omp-server.yml`) tramite
+il relay cifrato end-to-end `my.omp.sh`. Dal browser del telefono puoi leggere
+la sessione, scrivere prompt, interrompere e rispondere alle domande; `/model`,
+`/compact`, `/resume` e bash restano riservati al terminale.
+
+Il link non va copiato a mano: con il testo spezzato su più righe il token di
+scrittura si corrompe e la pagina entra in sola lettura. Usa il QR:
+
+```bash
+omp-qr                       # elenca le sessioni condivise; con una sola mostra subito il QR
+omp-qr 2                     # QR della sessione numero 2 dell'elenco
+omp-session qr progetto      # QR della sessione tmux omp-progetto
+omp-qr --view progetto       # link di sola lettura
+```
+
+`omp-session start` stampa il QR appena la sessione è condivisa. Fai uno
+screenshot in Termius e aprilo con Google Lens. Il link dà pieno controllo della
+sessione: trattalo come una password. Cambia dopo `/new`, `/resume` o `/fork`.
+
 ---
 
 ## 11. Come funziona il browser condiviso

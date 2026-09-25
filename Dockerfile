@@ -44,7 +44,7 @@ RUN ln -sf /usr/local/bin/bun /usr/local/bin/bunx
 RUN apt-get update && apt-get install -y --no-install-recommends \
       openssh-server sudo gosu tmux \
       git gh git-lfs ripgrep rsync fd-find xclip \
-      curl wget ca-certificates gnupg jq unzip zip \
+      curl wget ca-certificates gnupg jq unzip zip qrencode \
       build-essential make cmake pkg-config \
       python3 python3-pip python3-venv \
       chromium xvfb openbox x11vnc novnc websockify \
@@ -122,6 +122,7 @@ RUN chmod +x /usr/local/bin/browser-service \
              /usr/local/bin/enable-fusion-harness \
              /usr/local/bin/devbox-health \
              /usr/local/bin/omp-session \
+             /usr/local/bin/omp-qr \
              /usr/local/bin/omp-raw \
              /usr/local/bin/omp-update \
              /usr/local/bin/orca-update \

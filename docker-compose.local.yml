@@ -18,9 +18,11 @@ services:
       DEVBOX_AUTHORIZED_KEYS: "${DEVBOX_AUTHORIZED_KEYS:-}"
       DEVBOX_VNC_PASSWORD: "${DEVBOX_VNC_PASSWORD:-}"
       DEVBOX_GUI_URL: "${DEVBOX_GUI_URL:-}"
+      DEVBOX_PANEL_URL: "${DEVBOX_PANEL_URL:-}"
     ports:
       - "2222:22"
       - "6080:6080"
+      - "7690:7690"
     volumes:
       - ./data/persist:/persist
       - ./data/workspace:/workspace

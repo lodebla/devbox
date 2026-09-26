@@ -80,6 +80,13 @@ jobs:
           docker exec -u dev omp-devbox-smoke bash -lc 'test -f /home/dev/.omp/agent/fusion-harness/model-stack-trio.yaml'
           docker exec -u dev omp-devbox-smoke bash -lc 'grep -Fqx "  - /opt/omp/fusion-harness/fusion-harness.ts" /home/dev/.omp/agent/config.yml'
           docker exec -u dev omp-devbox-smoke bash -lc 'grep -Fqx "  - /opt/omp/node_modules/pi-commandcode-provider/index.ts" /home/dev/.omp/agent/config.yml'
+      - name: Verify phone panel and Collab helpers
+        run: |
+          docker exec -u dev omp-devbox-smoke bash -lc 'omp-panel status'
+          docker exec -u dev omp-devbox-smoke bash -lc 'test "$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:7690/)" = 401'
+          docker exec -u dev omp-devbox-smoke bash -lc 'test "$(stat -c %a /persist/panel/token)" = 600'
+          docker exec -u dev omp-devbox-smoke bash -lc 'command -v qrencode && omp-qr --json | jq -e "type == \"array\""'
+          docker exec -u dev omp-devbox-smoke bash -lc 'test -f /etc/devbox/skills/devbox-sessions/SKILL.md'
       - name: Verify browser isolation and optional GUI
         run: |
           docker exec -u dev omp-devbox-smoke bash -lc 'curl -fsS http://127.0.0.1:9222/json/version >/dev/null'

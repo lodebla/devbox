@@ -9,3 +9,9 @@ browser:
 # phone browser can join it. `omp-qr` prints the join QR for any session.
 collab:
   autoStart: control
+
+# Image-owned skills (e.g. devbox-sessions: start sessions / send slash
+# commands from the Collab chat). Kept outside ~/.omp so config sync stays clean.
+skills:
+  customDirectories:
+    - /etc/devbox/skills

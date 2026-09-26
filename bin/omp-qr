@@ -10,6 +10,7 @@ Usage:
   omp-qr <target>        show the QR for one session
   omp-qr --view <target> read-only link instead of full control
   omp-qr --url <target>  print the plain URL instead of a QR code
+  omp-qr --json          machine-readable list of shared sessions (no links)
 
 <target> is the number shown by the list, a tmux session name (with or
 without the "omp-" prefix), an OMP Collab instance id, or a pid.
@@ -24,6 +25,7 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --view) access=view ;;
     --url) format=url ;;
+    --json) format=json ;;
     -h|--help) usage; exit 0 ;;
     -*) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
     *) [[ -z "$target" ]] || { echo 'Only one target allowed' >&2; exit 2; }; target="$1" ;;
@@ -34,6 +36,7 @@ done
 hosts_json="$(omp collab list --json)"
 count="$(jq '.hosts | length' <<<"$hosts_json")"
 if [[ "$count" -eq 0 ]]; then
+  [[ "$format" == json ]] && { echo '[]'; exit 0; }
   echo 'No active Collab sessions. Start OMP (collab.autoStart shares it automatically) or run /collab inside it.' >&2
   exit 1
 fi
@@ -61,6 +64,14 @@ ids=() pids=() sessions=()
 while IFS=$'\t' read -r id pid; do
   ids+=("$id"); pids+=("$pid"); sessions+=("$(tmux_session_of "$pid")")
 done < <(jq -r '.hosts[] | [.instanceId, (.pid | tostring)] | @tsv' <<<"$hosts_json")
+
+if [[ "$format" == json ]]; then
+  # Machine-readable listing (no links): Collab host metadata plus the tmux
+  # session that owns it ("-" when OMP runs outside tmux).
+  printf '%s\n' "${sessions[@]}" | jq -R . | jq -s --argjson doc "$hosts_json" \
+    '[range(0; length) as $i | $doc.hosts[$i] + {tmux: .[$i]}]'
+  exit 0
+fi
 
 print_list() {
   local i

@@ -478,6 +478,41 @@ omp-qr --view progetto       # link di sola lettura
 screenshot in Termius e aprilo con Google Lens. Il link dà pieno controllo della
 sessione: trattalo come una password. Cambia dopo `/new`, `/resume` o `/fork`.
 
+### Pannello per il telefono (nuove sessioni e slash command)
+
+La chat Collab può solo scrivere all'agente: non avvia sessioni e non esegue
+`/model`, `/compact`, `/new`, `/resume`. Per questo il devbox avvia all'avvio un
+piccolo pannello web (porta `7690`, nessun LLM) che:
+
+- elenca le sessioni tmux con stato (pronta / lavora / domanda) e il tasto
+  **Apri chat** che apre il link Collab corretto, senza QR;
+- crea una nuova sessione OMP (nome + cartella);
+- mostra lo schermo della sessione e scrive nel terminale: tasti rapidi per
+  gli slash command, tasti ↑ ↓ Invio Esc Tab per i selettori tipo `/model`,
+  **Allarga** porta il terminale a 100 colonne (torna stretto quando rientri
+  da Termius).
+
+Pubblicazione tramite il tuo tunnel Cloudflare (container separato):
+
+1. Il compose pubblica `7690` sull'host ZimaOS.
+2. In Cloudflare Zero Trust → Networks → Tunnels → il tuo tunnel → *Public
+   hostname*: `omp.tuodominio.it` → `http://<IP-host-ZimaOS>:7690`.
+3. Consigliato: Access → Applications → Self-hosted su quell'hostname con
+   policy "email = la tua" (codice via email, piano gratuito). Il pannello può
+   scrivere nei terminali: non lasciarlo protetto solo dal token.
+4. Imposta `DEVBOX_PANEL_URL=https://omp.tuodominio.it` nell'app ZimaOS.
+5. Da Termius: `omp-panel login` → screenshot → Google Lens. Il cookie dura un
+   anno; aggiungi la pagina alla schermata Home.
+
+Gestione: `omp-panel status|restart|logs`, `omp-panel rotate-token` per
+scollegare tutti i browser. Il token sta in `/persist/panel/token`.
+
+In alternativa, dalla chat Collab puoi chiedere all'agente "apri una sessione
+X in /workspace/Y" o "manda /compact alla sessione Z": la skill
+`devbox-sessions` (in `/etc/devbox/skills`) gli insegna a farlo con
+`omp-session`/`omp-qr` e a risponderti con il link cliccabile. Costa un turno
+LLM e non può comandare la propria sessione: per quella usa il pannello.
+
 ---
 
 ## 11. Come funziona il browser condiviso

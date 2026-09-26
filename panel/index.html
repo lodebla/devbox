@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#111418">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>OMP devbox</title>
+<style>
+  :root { color-scheme: dark; --bg:#111418; --card:#1b2027; --line:#2c333d; --fg:#e6e9ee; --dim:#8b95a3; --acc:#5aa9ff; --ok:#4cc38a; --warn:#f0b429; --bad:#ef5d5d; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.4 system-ui, sans-serif; padding: env(safe-area-inset-top) 12px calc(12px + env(safe-area-inset-bottom)); }
+  header { display:flex; align-items:center; gap:8px; padding:12px 0; position:sticky; top:0; background:var(--bg); z-index:2; }
+  header h1 { font-size:18px; margin:0; flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  button, .btn { background:var(--card); color:var(--fg); border:1px solid var(--line); border-radius:10px; padding:10px 12px; font:inherit; text-decoration:none; display:inline-flex; align-items:center; justify-content:center; gap:4px; cursor:pointer; }
+  button.primary, .btn.primary { background:var(--acc); border-color:var(--acc); color:#06121f; font-weight:600; }
+  button.danger { color:var(--bad); }
+  button:disabled { opacity:.5; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:12px; margin-bottom:10px; }
+  .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .grow { flex:1; min-width:0; }
+  .title { font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .meta { color:var(--dim); font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .badge { font-size:12px; padding:2px 8px; border-radius:99px; border:1px solid var(--line); color:var(--dim); white-space:nowrap; }
+  .badge.busy { color:var(--warn); border-color:var(--warn); }
+  .badge.idle { color:var(--ok); border-color:var(--ok); }
+  .badge.ask { color:var(--bad); border-color:var(--bad); }
+  input { width:100%; background:#0c0f13; color:var(--fg); border:1px solid var(--line); border-radius:10px; padding:10px 12px; font:inherit; }
+  label { display:block; color:var(--dim); font-size:13px; margin:8px 0 4px; }
+  pre#screen { background:#0a0c0f; border:1px solid var(--line); border-radius:10px; padding:8px; margin:0 0 10px; overflow:auto; font:11px/1.25 ui-monospace, "JetBrains Mono", Menlo, monospace; max-height:55vh; white-space:pre; }
+  .keys { display:grid; grid-template-columns:repeat(4, 1fr); gap:6px; margin:8px 0; }
+  .chips { display:flex; gap:6px; overflow-x:auto; padding:2px 0 8px; }
+  .chips button { padding:6px 10px; font-size:13px; white-space:nowrap; }
+  #toast { position:fixed; left:12px; right:12px; bottom:calc(12px + env(safe-area-inset-bottom)); background:#2a3340; border-radius:10px; padding:10px 12px; display:none; z-index:5; }
+  .hidden { display:none !important; }
+  .empty { color:var(--dim); text-align:center; padding:24px 0; }
+</style>
+</head>
+<body>
+<header>
+  <button id="back" class="hidden" aria-label="Indietro">&larr;</button>
+  <h1 id="heading">OMP devbox</h1>
+  <button id="refresh" aria-label="Aggiorna">&#8635;</button>
+</header>
+
+<main id="list-view">
+  <details class="card" id="new-card">
+    <summary class="title">+ Nuova sessione</summary>
+    <label for="new-name">Nome (lettere, numeri, . _ -)</label>
+    <input id="new-name" autocomplete="off" autocapitalize="off" placeholder="progetto">
+    <label for="new-dir">Cartella</label>
+    <input id="new-dir" list="dirs" autocomplete="off" autocapitalize="off" placeholder="/workspace/progetto">
+    <datalist id="dirs"></datalist>
+    <div class="row" style="margin-top:10px"><button class="primary grow" id="create">Avvia OMP</button></div>
+  </details>
+  <div id="sessions"><div class="empty">Caricamento…</div></div>
+</main>
+
+<main id="detail-view" class="hidden">
+  <div class="row" style="margin-bottom:8px">
+    <a class="btn primary grow" id="open-chat" target="_blank" rel="noopener">Apri chat</a>
+    <button id="stop" class="danger">Chiudi</button>
+  </div>
+  <div class="meta" id="detail-meta" style="margin-bottom:8px"></div>
+  <pre id="screen"></pre>
+  <div class="chips">
+    <button data-cmd="/model">/model</button>
+    <button data-cmd="/compact">/compact</button>
+    <button data-cmd="/new">/new</button>
+    <button data-cmd="/resume">/resume</button>
+    <button data-cmd="/fork">/fork</button>
+    <button data-cmd="/tree">/tree</button>
+    <button data-cmd="/session">/session</button>
+    <button data-cmd="/usage">/usage</button>
+    <button data-cmd="/collab">/collab</button>
+  </div>
+  <div class="row">
+    <input id="cmd" class="grow" placeholder="/comando o testo" autocomplete="off" autocapitalize="off" enterkeyhint="send">
+    <button id="type" title="Scrivi senza Invio (es. ricerca nei selettori)">Scrivi</button>
+    <button class="primary" id="send">Invia</button>
+  </div>
+  <div class="keys">
+    <button data-key="Up">&uarr;</button>
+    <button data-key="Down">&darr;</button>
+    <button data-key="Enter">Invio</button>
+    <button data-key="Escape">Esc</button>
+    <button data-key="Left">&larr;</button>
+    <button data-key="Right">&rarr;</button>
+    <button data-key="Tab">Tab</button>
+    <button data-key="C-c">Ctrl-C</button>
+    <button data-key="PageUp">PgSu</button>
+    <button data-key="PageDown">PgGi&ugrave;</button>
+    <button data-key="BSpace">&#9003;</button>
+    <button id="widen">Allarga</button>
+  </div>
+</main>
+
+<div id="toast"></div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+let current = null;      // tmux session name shown in detail view
+let screenTimer = null;
+
+async function call(path, opts = {}) {
+  const res = await fetch(path, {
+    ...opts,
+    headers: opts.body ? { "content-type": "application/json" } : undefined,
+    body: opts.body ? JSON.stringify(opts.body) : undefined,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || res.statusText);
+  return data;
+}
+
+function toast(msg) {
+  const t = $("#toast");
+  t.textContent = msg;
+  t.style.display = "block";
+  clearTimeout(toast.timer);
+  toast.timer = setTimeout(() => (t.style.display = "none"), 3500);
+}
+
+function esc(s) {
+  return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+}
+
+async function loadList() {
+  const { sessions, dirs } = await call("/api/sessions");
+  $("#dirs").innerHTML = dirs.map((d) => `<option value="${esc(d)}">`).join("");
+  $("#sessions").innerHTML = sessions.length
+    ? sessions.map((s) => {
+        const c = s.collab;
+        const badge = !c ? '<span class="badge">non condivisa</span>'
+          : c.inputRequired ? '<span class="badge ask">domanda</span>'
+          : c.busy ? '<span class="badge busy">lavora</span>'
+          : '<span class="badge idle">pronta</span>';
+        return `<div class="card" data-tmux="${esc(s.tmux)}">
+          <div class="row"><div class="grow title">${esc(c?.title || s.tmux)}</div>${badge}</div>
+          <div class="meta">tmux: ${esc(s.tmux)}${c ? " · " + esc(c.model) : ""}</div>
+          ${c ? `<div class="meta">${esc(c.cwd)}</div>` : ""}
+          <div class="row" style="margin-top:8px">
+            ${c ? `<button class="primary grow" data-open="${esc(s.tmux)}">Apri chat</button>` : ""}
+            <button class="grow" data-detail="${esc(s.tmux)}">Comandi</button>
+          </div>
+        </div>`;
+      }).join("")
+    : '<div class="empty">Nessuna sessione tmux attiva.</div>';
+}
+
+async function openChat(tmux) {
+  // Open the window synchronously (popup blockers), then point it at the link.
+  const win = window.open("about:blank", "_blank");
+  try {
+    const { link } = await call(`/api/sessions/${encodeURIComponent(tmux)}/link`);
+    if (win) win.location = link; else location.href = link;
+  } catch (e) {
+    win?.close();
+    toast(e.message);
+  }
+}
+
+async function refreshScreen() {
+  if (!current) return;
+  try {
+    const { text, size } = await call(`/api/sessions/${encodeURIComponent(current)}/screen`);
+    const pre = $("#screen");
+    const atBottom = pre.scrollTop + pre.clientHeight >= pre.scrollHeight - 4;
+    pre.textContent = text;
+    if (atBottom) pre.scrollTop = pre.scrollHeight;
+    $("#detail-meta").textContent = `tmux: ${current} · terminale ${size}`;
+  } catch (e) {
+    toast(e.message);
+    showList();
+  }
+}
+
+async function showDetail(tmux) {
+  current = tmux;
+  $("#list-view").classList.add("hidden");
+  $("#detail-view").classList.remove("hidden");
+  $("#back").classList.remove("hidden");
+  $("#heading").textContent = tmux;
+  $("#open-chat").removeAttribute("href");
+  call(`/api/sessions/${encodeURIComponent(tmux)}/link`)
+    .then(({ link }) => ($("#open-chat").href = link))
+    .catch(() => $("#open-chat").classList.add("hidden"));
+  $("#open-chat").classList.remove("hidden");
+  await refreshScreen();
+  $("#screen").scrollTop = $("#screen").scrollHeight;
+  clearInterval(screenTimer);
+  screenTimer = setInterval(refreshScreen, 1500);
+}
+
+function showList() {
+  current = null;
+  clearInterval(screenTimer);
+  $("#detail-view").classList.add("hidden");
+  $("#list-view").classList.remove("hidden");
+  $("#back").classList.add("hidden");
+  $("#heading").textContent = "OMP devbox";
+  loadList().catch((e) => toast(e.message));
+}
+
+async function send(text, enter = true) {
+  if (!current || !text) return;
+  await call(`/api/sessions/${encodeURIComponent(current)}/send`, { method: "POST", body: { text, enter } });
+  setTimeout(refreshScreen, 400);
+}
+
+$("#sessions").addEventListener("click", (e) => {
+  const open = e.target.closest("[data-open]");
+  const detail = e.target.closest("[data-detail]");
+  if (open) openChat(open.dataset.open);
+  else if (detail) showDetail(detail.dataset.detail);
+});
+$("#back").onclick = showList;
+$("#refresh").onclick = () => (current ? refreshScreen() : loadList().catch((e) => toast(e.message)));
+$("#new-name").addEventListener("input", (e) => {
+  const dir = $("#new-dir");
+  if (!dir.dataset.touched) dir.value = e.target.value ? `/workspace/${e.target.value}` : "";
+});
+$("#new-dir").addEventListener("input", (e) => (e.target.dataset.touched = "1"));
+$("#create").onclick = async () => {
+  const btn = $("#create");
+  btn.disabled = true;
+  btn.textContent = "Avvio… (fino a 30 s)";
+  try {
+    const { tmux } = await call("/api/sessions", { method: "POST", body: { name: $("#new-name").value.trim(), dir: $("#new-dir").value.trim() } });
+    $("#new-card").open = false;
+    $("#new-name").value = "";
+    $("#new-dir").value = "";
+    delete $("#new-dir").dataset.touched;
+    await showDetail(tmux);
+  } catch (e) {
+    toast(e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Avvia OMP";
+  }
+};
+document.querySelectorAll("[data-cmd]").forEach((b) => (b.onclick = () => send(b.dataset.cmd).catch((e) => toast(e.message))));
+document.querySelectorAll("[data-key]").forEach((b) => (b.onclick = () =>
+  call(`/api/sessions/${encodeURIComponent(current)}/keys`, { method: "POST", body: { keys: [b.dataset.key] } })
+    .then(() => setTimeout(refreshScreen, 250))
+    .catch((e) => toast(e.message))));
+$("#send").onclick = () => {
+  const input = $("#cmd");
+  send(input.value).then(() => (input.value = "")).catch((e) => toast(e.message));
+};
+$("#type").onclick = () => {
+  const input = $("#cmd");
+  send(input.value, false).then(() => (input.value = "")).catch((e) => toast(e.message));
+};
+$("#cmd").addEventListener("keydown", (e) => { if (e.key === "Enter") $("#send").click(); });
+$("#widen").onclick = () =>
+  call(`/api/sessions/${encodeURIComponent(current)}/resize`, { method: "POST", body: { width: 100 } })
+    .then(() => { toast("Terminale a 100 colonne (torna stretto quando rientri da Termius)"); setTimeout(refreshScreen, 300); })
+    .catch((e) => toast(e.message));
+$("#stop").onclick = async () => {
+  if (!confirm(`Chiudere la sessione ${current}? OMP verrà terminato.`)) return;
+  try {
+    await call(`/api/sessions/${encodeURIComponent(current)}/stop`, { method: "POST" });
+    showList();
+  } catch (e) { toast(e.message); }
+};
+document.addEventListener("visibilitychange", () => { if (!document.hidden) current ? refreshScreen() : loadList().catch(() => {}); });
+
+loadList().catch((e) => toast(e.message));
+</script>
+</body>
+</html>

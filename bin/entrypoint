@@ -40,6 +40,7 @@ mkdir -p \
   /persist/data \
   /persist/chromium \
   /persist/vnc \
+  /persist/panel \
   /persist/nvim \
   /workspace
 
@@ -48,7 +49,7 @@ mkdir -p \
 # writable by the non-root dev user on every boot without recursively walking
 # large persistent trees.
 chown dev:dev /persist /persist/omp /persist/orca /persist/codex /persist/ssh /persist/ssh-host-keys \
-  /persist/config /persist/data /persist/chromium /persist/vnc /persist/nvim /workspace 2>/dev/null || true
+  /persist/config /persist/data /persist/chromium /persist/vnc /persist/nvim /persist/panel /workspace 2>/dev/null || true
 # sshd StrictModes rejects authorized_keys paths that traverse writable parent
 # directories. ZimaOS may create the bind-mounted /persist directory as 0777.
 chmod 755 /persist
@@ -172,6 +173,8 @@ export CHROME_USER_DATA_DIR=/persist/chromium
 export NPM_CONFIG_PREFIX=/opt/npm-global
 export PATH=/opt/npm-global/bin:/opt/omp/node_modules/.bin:/usr/local/go/bin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 PROFILE
+# `omp-panel login` builds its link from the public panel URL set in ZimaOS.
+printf 'export DEVBOX_PANEL_URL=%q\n' "${DEVBOX_PANEL_URL:-}" >> /etc/profile.d/devbox.sh
 chmod 644 /etc/profile.d/devbox.sh
 
 log "Starting shared Chromium service"
@@ -183,6 +186,14 @@ if ! gosu dev env \
     CHROME_USER_DATA_DIR=/persist/chromium \
     browser-service start; then
   log "WARNING: browser service did not start. SSH will still be available; inspect with: browser-service logs"
+fi
+
+# Phone control panel (sessions, slash commands, Collab links). A login shell
+# gives it — and any tmux server it starts — the same env as SSH sessions.
+log "Starting OMP phone panel on container port ${DEVBOX_PANEL_PORT:-7690}"
+if ! gosu dev env HOME=/home/dev DEVBOX_PANEL_PORT="${DEVBOX_PANEL_PORT:-7690}" \
+    bash -lc 'omp-panel start'; then
+  log "WARNING: phone panel did not start; inspect with: omp-panel logs"
 fi
 
 log "Starting SSH on container port 22"

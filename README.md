@@ -34,6 +34,9 @@ PC / phone
    |                         (loopback only)
    |                              |
    +-- noVNC :6080 --------------+   [viewer only when enabled]
+   |
+   +-- panel :7690 ---------> tmux sessions / slash commands / Collab links
+   +-- my.omp.sh (Collab, E2E encrypted) <-> OMP sessions
 
 Hermes container
    |
@@ -57,6 +60,7 @@ omp-session capture myproject 200
 omp-session send myproject "run the tests"
 omp-session qr myproject      # phone join QR (Collab, full control)
 omp-qr                        # list every shared OMP session / show its QR
+omp-panel login               # phone panel login QR (sessions, slash commands, keys)
 ```
 
 ## Fusion Harness in OMP

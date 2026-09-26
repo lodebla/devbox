@@ -1,0 +1,86 @@
+#!/usr/bin/env bash
+# Supervise the phone control panel for OMP sessions (panel/server.ts).
+set -Eeuo pipefail
+
+PANEL_DIR="${DEVBOX_PANEL_DIR:-/opt/devbox-panel}"
+PORT="${DEVBOX_PANEL_PORT:-7690}"
+TOKEN_FILE="${DEVBOX_PANEL_TOKEN_FILE:-/persist/panel/token}"
+STATE_DIR="${XDG_RUNTIME_DIR:-/tmp}/omp-devbox-${UID}"
+PIDFILE="$STATE_DIR/panel.pid"
+LOGFILE="$STATE_DIR/panel.log"
+mkdir -p "$STATE_DIR"
+
+usage() {
+  cat <<'MSG'
+Usage: omp-panel {start|stop|restart|status|logs|login|rotate-token}
+
+  login         print the login link + QR (sets a 1-year cookie on the phone)
+  rotate-token  invalidate every logged-in browser and print a new login
+
+Public URL for login links: DEVBOX_PANEL_URL (e.g. https://omp.example.com).
+MSG
+}
+
+ensure_token() {
+  if [[ ! -s "$TOKEN_FILE" ]]; then
+    mkdir -p "$(dirname "$TOKEN_FILE")"
+    (umask 077; od -An -tx1 -N24 /dev/urandom | tr -d ' \n' >"$TOKEN_FILE")
+  fi
+  chmod 600 "$TOKEN_FILE"
+}
+
+running() {
+  local pid
+  [[ -f "$PIDFILE" ]] && pid="$(cat "$PIDFILE")" && [[ "$pid" =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null
+}
+
+start() {
+  ensure_token
+  if running; then echo "panel already running (pid $(cat "$PIDFILE"))"; return 0; fi
+  DEVBOX_PANEL_PORT="$PORT" DEVBOX_PANEL_TOKEN_FILE="$TOKEN_FILE" \
+    nohup bun "$PANEL_DIR/server.ts" >"$LOGFILE" 2>&1 &
+  echo $! >"$PIDFILE"
+  for _ in $(seq 1 40); do
+    if [[ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 1 "http://127.0.0.1:$PORT/" 2>/dev/null)" != 000 ]]; then
+      echo "panel ready on port $PORT"
+      return 0
+    fi
+    running || break
+    sleep 0.25
+  done
+  echo "panel failed to start; see: omp-panel logs" >&2
+  return 1
+}
+
+stop() {
+  if running; then
+    kill "$(cat "$PIDFILE")" 2>/dev/null || true
+  fi
+  rm -f "$PIDFILE"
+  echo "panel stopped"
+}
+
+login() {
+  ensure_token
+  local base="${DEVBOX_PANEL_URL:-}"
+  if [[ -z "$base" ]]; then
+    base="http://$(hostname -I 2>/dev/null | awk '{print $1}'):$PORT"
+    echo "DEVBOX_PANEL_URL not set; using container address (LAN only): $base" >&2
+  fi
+  local url="${base%/}/login?t=$(cat "$TOKEN_FILE")"
+  qrencode -t UTF8 -m 1 -l L "$url"
+  echo "login link · screenshot, then open it with Google Lens (keep it secret)"
+}
+
+case "${1:-status}" in
+  start) start ;;
+  stop) stop ;;
+  restart) stop; start ;;
+  status)
+    if running; then echo "panel running (pid $(cat "$PIDFILE")) on port $PORT"; else echo "panel stopped"; exit 1; fi ;;
+  logs) tail -n 80 "$LOGFILE" 2>/dev/null || true ;;
+  login) login ;;
+  rotate-token) rm -f "$TOKEN_FILE"; ensure_token; running && { stop; start; }; login ;;
+  -h|--help|help) usage ;;
+  *) usage >&2; exit 2 ;;
+esac

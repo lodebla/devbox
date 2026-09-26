@@ -18,7 +18,7 @@ grep -Fq "usermod --password '*' dev" Dockerfile || fail "dev account is left lo
 ! grep -q 'groupadd --gid 1000 dev' Dockerfile || fail "Dockerfile tries to recreate occupied GID 1000"
 pass "base node UID/GID reuse and SSH account state"
 
-for f in bin/entrypoint bin/enable-fusion-harness bin/browser-service bin/browser-gui bin/omp-sync-import bin/devbox-health bin/omp-session bin/omp-qr bin/omp-raw bin/omp-update bin/orca-update sync/sync-omp.sh tests/test_fusion_harness.sh tests/test_static.sh; do
+for f in bin/entrypoint bin/enable-fusion-harness bin/browser-service bin/browser-gui bin/omp-sync-import bin/devbox-health bin/omp-session bin/omp-qr bin/omp-panel bin/omp-raw bin/omp-update bin/orca-update sync/sync-omp.sh tests/test_fusion_harness.sh tests/test_static.sh; do
   bash -n "$f" || fail "bash syntax: $f"
 done
 pass "bash syntax"
@@ -133,4 +133,14 @@ grep -q 'grep -qxF "\$DEVBOX_AUTHORIZED_KEYS" /persist/ssh/authorized_keys' bin/
 grep -q 'printf .*DEVBOX_AUTHORIZED_KEYS.*>> /persist/ssh/authorized_keys' bin/entrypoint || fail "DEVBOX_AUTHORIZED_KEYS is not appended safely"
 pass "authorized_keys merge-safe persistence"
 
+
+# Phone control: Collab auto-share, panel, and launcher skill.
+grep -q 'autoStart: control' config/omp-server.yml || fail "Collab auto-start is not enabled"
+grep -q -- '- /etc/devbox/skills' config/omp-server.yml || fail "image skills directory is not registered"
+[[ -f skills/devbox-sessions/SKILL.md ]] || fail "devbox-sessions skill missing"
+grep -q 'COPY panel/ /opt/devbox-panel/' Dockerfile || fail "panel is not copied into the image"
+grep -q "bash -lc 'omp-panel start'" bin/entrypoint || fail "panel is not started at boot"
+grep -q 'target: 7690' zimaos-compose.yml || fail "panel port is not published for the Cloudflare tunnel"
+bun build --target=bun panel/server.ts --outdir /tmp/devbox-panel-build >/dev/null || fail "panel server does not compile"
+pass "phone panel + Collab wiring"
 echo "All static tests passed."

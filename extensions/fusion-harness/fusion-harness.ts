@@ -1,8 +1,9 @@
 /**
  * fusion-harness — FUSE 2-5 frontier models instead of racing them. AND, not OR.
  *
- * Model stack: exactly one ARCHITECT, exactly one primary/Main BUILDER (the live
- * raw-chat host), and up to three secondary builders. Explicit YAML via --fh-config;
+ * Model stack: exactly one ARCHITECT, exactly one Main BUILDER (the live raw-chat host),
+ * and up to three secondary builders. Main is the YAML `primary: true` slot (imposed on
+ * the host) or, without one, whatever model OMP runs. Explicit YAML via --fh-config;
  * legacy two-slot flags remain compatible.
  *
  * Commands:
@@ -48,7 +49,7 @@ import { Container, Text, matchesKey, truncateToWidth, visibleWidth } from "@ear
 import { registerAutoValidateCommand, registerCollaborateCommand } from "./modules/cmd-build.ts";
 import { registerFusionCommand } from "./modules/cmd-fusion.ts";
 import { registerReadonlyCommands } from "./modules/cmd-readonly.ts";
-import { childCatalogueArgs, isOmpRuntime, parseChildCatalogue, piInvocation, runChild } from "./modules/child-runner.ts";
+import { isOmpRuntime, piInvocation, runChild } from "./modules/child-runner.ts";
 import {
 	cloneStack,
 	findGlobalStackConfig,
@@ -215,11 +216,19 @@ export default function (pi: ExtensionAPI) {
 		} catch {
 			/* no model on this context — keep the last known one */
 		}
+		// Without `primary: true` in the YAML, Main is whatever OMP runs right now.
+		const main = configuredStack?.primaryBuilder;
+		if (main?.followsHost) {
+			main.model = hostModel ?? "";
+			main.thinking = pi.getThinkingLevel() as Thinking;
+		}
 	};
-	// Precedence: explicit --builder > the host session's live model > the shipped default.
+	// Precedence: configured primary slot > explicit --builder > the host session's live model > the shipped default.
 	const builderModel = () => {
 		ensureConfigLoaded();
-		return configuredStack?.primaryBuilder.model ?? (flagStr("builder") || hostModel || DEFAULT_BUILDER);
+		const main = configuredStack?.primaryBuilder;
+		if (main && !main.followsHost) return main.model;
+		return flagStr("builder") || hostModel || DEFAULT_BUILDER;
 	};
 
 	/** --<role>-system-prompt: inline text, or a file path (file contents win if it exists). */
@@ -307,56 +316,23 @@ export default function (pi: ExtensionAPI) {
 		});
 	};
 
-	let childVisibleModelsPromise: Promise<Set<string>> | undefined;
-	const childVisibleModels = async (): Promise<Set<string>> => {
-		childVisibleModelsPromise ??= (async () => {
-			const configuredModels = configuredStack ? orderedSlots(configuredStack).map((slot) => slot.model) : [];
-			const host = isOmpRuntime() ? "omp" : "pi";
-			const invocation = piInvocation(childCatalogueArgs(configuredModels, host));
-			const result = await pi.exec(invocation.command, invocation.args, { timeout: 30_000 });
-			if (result.code !== 0) throw new Error(`child model catalogue failed: ${result.stderr || result.stdout}`);
-			return parseChildCatalogue(result.stdout);
-		})();
-		return childVisibleModelsPromise;
-	};
-
-	// A configured stack is a declaration that every slot is runnable. Resolve/auth-check
-	// both the parent registry and the clean-room child catalogue, then make Main the host.
+	// A YAML `primary: true` slot becomes the host model (best-effort); without one,
+	// Main follows OMP's own model choice. No startup runnability checks: they spawned
+	// a child catalogue probe that could exceed the 30s handler timeout and killed OMP.
+	// OMP rebinds extension factories to every subagent session: those run on the model
+	// OMP resolved for them (task.agentModelOverrides / model roles), so never take them over.
 	pi.on("session_start", async (_ev: any, ctx: any) => {
+		if (ctx.agent?.kind === "sub") return;
 		ensureConfigLoaded();
 		if (!configuredStack) return;
-		const errors: string[] = [];
-		const resolved = new Map<string, any>();
-		let childCatalogue = new Set<string>();
-		try {
-			childCatalogue = await childVisibleModels();
-		} catch (error) {
-			errors.push(error instanceof Error ? error.message : String(error));
-		}
-		for (const slot of orderedSlots(configuredStack)) {
-			const slash = slot.model.indexOf("/");
-			const model = slash > 0 ? ctx.modelRegistry.find(slot.model.slice(0, slash), slot.model.slice(slash + 1)) : undefined;
-			if (!model) errors.push(`${slot.name}: model is not registered: ${slot.model}`);
-			else if (!ctx.modelRegistry.hasConfiguredAuth(model)) errors.push(`${slot.name}: no configured authentication for ${slot.model}`);
-			else if (!childCatalogue.has(slot.model)) errors.push(`${slot.name}: ${slot.model} is not visible to clean-room children launched with --no-extensions`);
-			else resolved.set(slot.id, model);
-		}
-		if (!errors.length) {
+		const main = configuredStack.primaryBuilder;
+		if (!main.followsHost) {
 			const current = ctx.model ? `${ctx.model.provider}/${ctx.model.id}` : "";
-			if (current !== configuredStack.primaryBuilder.model) {
-				const selected = await pi.setModel(resolved.get(configuredStack.primaryBuilder.id));
-				if (!selected) errors.push(`Main builder could not become host model: ${configuredStack.primaryBuilder.model}`);
-			}
-		}
-		if (!errors.length) pi.setThinkingLevel(configuredStack.primaryBuilder.thinking);
-		if (errors.length) {
-			process.exitCode = 1;
-			stackReadyError = `fusion-harness: configured model stack is not runnable:\n${errors.map((error) => `- ${error}`).join("\n")}`;
-			try {
-				ctx.ui.notify(stackReadyError, "error");
-			} catch {}
-			ctx.shutdown?.();
-			throw new Error(stackReadyError);
+			if (current !== main.model) {
+				const slash = main.model.indexOf("/");
+				const model = slash > 0 ? ctx.modelRegistry.find(main.model.slice(0, slash), main.model.slice(slash + 1)) : undefined;
+				if (model && (await pi.setModel(model))) pi.setThinkingLevel(main.thinking);
+			} else pi.setThinkingLevel(main.thinking);
 		}
 		noteHost(ctx);
 	});
@@ -1243,6 +1219,7 @@ export default function (pi: ExtensionAPI) {
 			ctx.ui.notify("fusion-harness: /fh-only one-shot image routing is not supported yet; target remains armed", "warning");
 			return { action: "continue" as const };
 		}
+		noteHost(ctx);
 		const slot = modelStack().slots.find((candidate) => candidate.id === oneShotTargetSlotId);
 		if (!slot) {
 			disarmOneShot();

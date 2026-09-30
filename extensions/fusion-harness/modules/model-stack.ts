@@ -14,6 +14,11 @@ export interface ModelSlot {
 	color: HexColor;
 	architect: boolean;
 	primary: boolean;
+	/**
+	 * The Main builder synthesized when no YAML slot sets `primary: true`: its model and
+	 * thinking are whatever the host session currently runs, never imposed by the harness.
+	 */
+	followsHost: boolean;
 	systemPrompt?: string;
 	systemPromptSource?: string;
 	/**
@@ -60,6 +65,8 @@ const THINKING_ALIASES: Record<string, Thinking> = {
 };
 
 export const SLOT_COLOR_PALETTE: HexColor[] = ["#22D3EE", "#F59E0B", "#A78BFA", "#34D399", "#F472B6"];
+/** Id of the synthesized Main builder that follows the host session's model. */
+export const HOST_SLOT_ID = "main";
 const HEX_COLOR_RE = /^#[0-9A-Fa-f]{6}$/;
 const SLOT_NAME_RE = /^[A-Za-z0-9_-]{1,16}$/;
 const MODEL_RE = /^[^/\s]+\/[^\s]+$/;
@@ -140,7 +147,12 @@ export function loadModelStack(configPathInput: string): ModelStack {
 	if (!Array.isArray(parsed)) {
 		throw new Error(`fusion-harness: model-stack config invalid (${configPath}):\n- top-level YAML value must be a list of model slots`);
 	}
-	if (parsed.length < 2 || parsed.length > 5) errors.push(`slot count must be between 2 and 5; found ${parsed.length}`);
+	const hasPrimary = parsed.some((raw) => !!raw && typeof raw === "object" && (raw as Record<string, unknown>).primary === true);
+	// Without a primary slot the host-following Main builder takes the fifth seat.
+	const [minSlots, maxSlots] = hasPrimary ? [2, 5] : [1, 4];
+	if (parsed.length < minSlots || parsed.length > maxSlots) {
+		errors.push(`slot count must be between ${minSlots} and ${maxSlots}${hasPrimary ? "" : " when no slot sets primary: true"}; found ${parsed.length}`);
+	}
 
 	const codename = codenameFromPath(configPath);
 	const configDir = path.dirname(configPath);
@@ -204,6 +216,7 @@ export function loadModelStack(configPathInput: string): ModelStack {
 			thinking: thinking ?? "medium",
 			architect,
 			primary,
+			followsHost: false,
 			systemPrompt: prompt.text,
 			systemPromptSource: prompt.source,
 			appendSystemPrompts,
@@ -215,8 +228,10 @@ export function loadModelStack(configPathInput: string): ModelStack {
 	const builders = drafts.filter((slot) => !slot.architect);
 	const primaries = builders.filter((slot) => slot.primary);
 	if (architectDrafts.length !== 1) errors.push(`exactly one slot must set architect: true; found ${architectDrafts.length}`);
-	if (builders.length < 1) errors.push("at least one non-architect builder slot is required");
-	if (primaries.length !== 1) errors.push(`exactly one non-architect builder must set primary: true; found ${primaries.length}`);
+	if (primaries.length > 1) errors.push(`at most one non-architect builder may set primary: true; found ${primaries.length}`);
+	if (!primaries.length && ids.has(HOST_SLOT_ID)) {
+		errors.push(`slot id "${HOST_SLOT_ID}" is reserved for the host-following Main builder when no slot sets primary: true`);
+	}
 
 	const explicitColors = new Set<string>();
 	for (const slot of drafts) {
@@ -227,6 +242,10 @@ export function loadModelStack(configPathInput: string): ModelStack {
 
 	if (errors.length) {
 		throw new Error(`fusion-harness: model-stack config invalid (${configPath}):\n${errors.map((error) => `- ${error}`).join("\n")}`);
+	}
+
+	if (!primaries.length) {
+		drafts.push({ id: HOST_SLOT_ID, name: HOST_SLOT_ID, model: "", thinking: "medium", architect: false, primary: true, followsHost: true, appendSystemPrompts: [] });
 	}
 
 	const usedColors = new Set(explicitColors);
@@ -256,6 +275,7 @@ export function synthesizeLegacyStack(options: LegacyStackOptions): ModelStack {
 		color: "#A78BFA",
 		architect: true,
 		primary: false,
+		followsHost: false,
 		systemPrompt: options.architectSystemPrompt,
 		appendSystemPrompts: [],
 	};
@@ -267,6 +287,7 @@ export function synthesizeLegacyStack(options: LegacyStackOptions): ModelStack {
 		color: "#F59E0B",
 		architect: false,
 		primary: true,
+		followsHost: false,
 		systemPrompt: options.builderSystemPrompt,
 		appendSystemPrompts: [],
 	};

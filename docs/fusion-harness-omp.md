@@ -173,9 +173,9 @@ The IDs above are not guarantees for another account. Copy the exact `provider` 
 
 Stack invariants:
 
-- 2–5 slots;
+- 2–5 slots with a `primary: true` builder, or 1–4 slots without one (Main then follows the model OMP is running and takes the fifth seat);
 - exactly one `architect: true` slot;
-- exactly one non-architect `primary: true` slot;
+- at most one non-architect `primary: true` slot;
 - unique slot names;
 - supported thinking levels;
 - no duplicate colors.
@@ -265,7 +265,6 @@ OMP is not CLI-compatible with Pi in three relevant areas:
 The OMP-compatible fusion-harness implementation must therefore:
 
 - load the Command Code extension explicitly inside OMP clean-room children;
-- use `omp models --json` for OMP child catalog checks;
 - omit unsupported OMP flags;
 - let OMP create the first child session and use `--session` only to resume it;
 - translate `find`/`ls` to `glob` in OMP tool allowlists;
@@ -381,37 +380,26 @@ omp \
   --fh-config ~/.omp/agent/fusion-harness/model-stack-trio.yaml
 ```
 
-### `model is not registered`
+### A `/fh-*` child fails with a model error
 
-The provider/model ID in YAML does not exactly match OMP's catalog. Compare it with:
+The harness does not validate the stack at startup (a startup catalogue probe could exceed OMP's 30s handler timeout and close OMP). A wrong or unavailable model therefore surfaces only when a `/fh-*` command launches that slot's child.
+
+Check the provider/model ID in YAML against OMP's catalog:
 
 ```bash
 omp models --json
 ```
 
-Correct the provider prefix, spelling, punctuation, and model ID.
-
-### `not visible to clean-room children`
-
-For Command Code, identify the user plugin path:
+For Command Code, verify the plugin can be loaded explicitly by a clean-room child:
 
 ```bash
 omp plugin list --json
-```
-
-Then verify the plugin can be loaded explicitly by OMP:
-
-```bash
 omp --no-extensions \
   -e /absolute/path/to/pi-commandcode-provider/index.ts \
   models --json commandcode
 ```
 
-If that catalog does not contain the configured model, the child cannot use it.
-
-### `no configured authentication`
-
-Authenticate the provider in OMP with `/login`. Do not solve a subscription setup problem by copying sample API keys from the repository.
+If that catalog does not contain the configured model, the child cannot use it. For missing authentication, run `/login` in OMP; do not copy sample API keys from the repository.
 
 ### `Failed to load extension .../npm:pi-commandcode-provider`
 

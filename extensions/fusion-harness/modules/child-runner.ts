@@ -61,37 +61,6 @@ export function childToolsArg(tools: string | "none", host: ChildHost): string {
 	return mapped.join(",");
 }
 
-/** Build the model-catalogue command for the current host CLI. */
-export function childCatalogueArgs(models: Iterable<string>, host: ChildHost): string[] {
-	const extensions = childExtensionArgsForModels(models, host);
-	return host === "omp"
-		? ["--no-extensions", ...extensions, "models", "--json"]
-		: ["--no-extensions", ...extensions, "--list-models"];
-}
-
-/** Parse either pi's tabular or OMP's JSON model-catalogue output. */
-export function parseChildCatalogue(stdout: string): Set<string> {
-	const trimmed = stdout.trim();
-	if (trimmed.startsWith("{")) {
-		try {
-			const parsed = JSON.parse(trimmed) as { models?: Array<{ provider?: unknown; id?: unknown }> };
-			const models = new Set<string>();
-			for (const model of parsed.models ?? []) {
-				if (typeof model.provider === "string" && typeof model.id === "string") models.add(`${model.provider}/${model.id}`);
-			}
-			return models;
-		} catch {
-			return new Set<string>();
-		}
-	}
-	const models = new Set<string>();
-	for (const line of stdout.split("\n").slice(1)) {
-		const [provider, model] = line.trim().split(/\s+/);
-		if (provider && model) models.add(`${provider}/${model}`);
-	}
-	return models;
-}
-
 /** Detect whether the extension is running inside the OMP CLI. */
 export function isOmpRuntime(argv = process.argv): boolean {
 	const script = argv[1] ?? "";

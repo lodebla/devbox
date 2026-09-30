@@ -45,7 +45,7 @@ describe("model stack", () => {
   test.each([
     ["no architect", valid.replace("  architect: true\n", "")],
     ["architect primary", valid.replace("  architect: true\n", "  architect: true\n  primary: true\n")],
-    ["no primary builder", valid.replace("  primary: true\n", "")],
+    ["two primary builders", valid.replace("- name: reviewer\n", "- name: reviewer\n  primary: true\n")],
     ["duplicate names", valid.replace("- name: reviewer", "- name: main")],
     ["bad color", valid.replace('"#F59E0B"', '"amber"')],
     ["unknown key", valid.replace("  primary: true", "  primry: true")],
@@ -57,6 +57,21 @@ describe("model stack", () => {
   test("rejects six slots", () => {
     const extra = [1,2,3].map((n) => `- name: extra${n}\n  model: google/gemini-${n}\n`).join("");
     expect(() => loadModelStack(fixture(valid + extra).file)).toThrow("slot count must be between 2 and 5");
+  });
+
+  test("without a primary slot, Main follows the host model and takes the fifth seat", () => {
+    const body = valid.replace("- name: main", "- name: sol").replace("  primary: true\n", "");
+    const stack = loadModelStack(fixture(body).file);
+    expect(orderedSlots(stack).map((s) => s.id)).toEqual(["architect", "main", "sol", "reviewer"]);
+    expect(stack.primaryBuilder).toMatchObject({ id: "main", primary: true, followsHost: true, model: "" });
+    expect(stack.builders.filter((s) => !s.followsHost).every((s) => !s.primary)).toBe(true);
+
+    const five = body + [1, 2].map((n) => `- name: extra${n}\n  model: google/gemini-${n}\n`).join("");
+    expect(() => loadModelStack(fixture(five).file)).toThrow("between 1 and 4 when no slot sets primary");
+  });
+
+  test("without a primary slot, the name main is reserved", () => {
+    expect(() => loadModelStack(fixture(valid.replace("  primary: true\n", "")).file)).toThrow('slot id "main" is reserved');
   });
 
   test("resolves a system prompt relative to YAML", () => {

@@ -1,12 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import {
-  childCatalogueArgs,
   childContextIsolationArgs,
   childExtensionArgsForModels,
   childSessionIdFlag,
   childToolsArg,
   isOmpRuntime,
-  parseChildCatalogue,
 } from "../modules/child-runner.ts";
 
 describe("clean-room child extensions", () => {
@@ -29,26 +27,6 @@ describe("clean-room child extensions", () => {
         "commandcode/deepseek/deepseek-v4-flash",
       ]),
     ).toEqual(["--extension", "npm:pi-commandcode-provider"]);
-  });
-
-  test("uses OMP's JSON model command and absolute provider entrypoint", () => {
-    const args = childCatalogueArgs(["commandcode/z-ai/glm-5.3-flash"], "omp");
-    expect(args.slice(0, 2)).toEqual(["--no-extensions", "--extension"]);
-    expect(args[2]).toMatch(/[\\/]pi-commandcode-provider[\\/]index\.ts$/);
-    expect(args.slice(3)).toEqual(["models", "--json"]);
-  });
-
-  test("parses OMP's JSON model catalog", () => {
-    expect(
-      parseChildCatalogue(
-        JSON.stringify({
-          models: [
-            { provider: "commandcode", id: "z-ai/glm-5.3-flash" },
-            { provider: "openai-codex", id: "gpt-5.6-sol" },
-          ],
-        }),
-      ),
-    ).toEqual(new Set(["commandcode/z-ai/glm-5.3-flash", "openai-codex/gpt-5.6-sol"]));
   });
 
   test("does not pass a synthetic session id to OMP", () => {

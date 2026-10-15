@@ -12,12 +12,15 @@ mkdir -p "$STATE_DIR"
 
 usage() {
   cat <<'MSG'
-Usage: omp-panel {start|stop|restart|status|logs|login|rotate-token}
+Usage: omp-panel {start|stop|restart|status|logs|login [url]|rotate-token [url]}
 
-  login         print the login link + QR (sets a 1-year cookie on the phone)
-  rotate-token  invalidate every logged-in browser and print a new login
+  login [url]        print the login link + QR (sets a 1-year cookie on the phone)
+  rotate-token [url] invalidate every logged-in browser and print a new login
 
-Public URL for login links: DEVBOX_PANEL_URL (e.g. https://omp.example.com).
+[url] is how the phone reaches the panel: the Cloudflare hostname
+(https://omp.example.com) or the ZimaOS LAN address (http://192.168.1.10:7690).
+Defaults to DEVBOX_PANEL_URL. The container's own IP is a Docker bridge
+address and is NOT reachable from the phone.
 MSG
 }
 
@@ -62,14 +65,15 @@ stop() {
 
 login() {
   ensure_token
-  local base="${DEVBOX_PANEL_URL:-}"
+  local base="${1:-${DEVBOX_PANEL_URL:-}}"
   if [[ -z "$base" ]]; then
-    base="http://$(hostname -I 2>/dev/null | awk '{print $1}'):$PORT"
-    echo "DEVBOX_PANEL_URL not set; using container address (LAN only): $base" >&2
+    echo 'No panel URL: pass it (omp-panel login http://<IP-ZimaOS>:7690) or set DEVBOX_PANEL_URL in the ZimaOS app.' >&2
+    return 2
   fi
+  [[ "$base" =~ ^https?:// ]] || base="http://$base"
   local url="${base%/}/login?t=$(cat "$TOKEN_FILE")"
   qrencode -t UTF8 -m 1 -l L "$url"
-  echo "login link · screenshot, then open it with Google Lens (keep it secret)"
+  echo "login link for ${base%/} · screenshot, then open it with Google Lens (keep it secret)"
 }
 
 case "${1:-status}" in
@@ -79,8 +83,8 @@ case "${1:-status}" in
   status)
     if running; then echo "panel running (pid $(cat "$PIDFILE")) on port $PORT"; else echo "panel stopped"; exit 1; fi ;;
   logs) tail -n 80 "$LOGFILE" 2>/dev/null || true ;;
-  login) login ;;
-  rotate-token) rm -f "$TOKEN_FILE"; ensure_token; running && { stop; start; }; login ;;
+  login) login "${2:-}" ;;
+  rotate-token) rm -f "$TOKEN_FILE"; ensure_token; if running; then stop; start; fi; login "${2:-}" ;;
   -h|--help|help) usage ;;
   *) usage >&2; exit 2 ;;
 esac

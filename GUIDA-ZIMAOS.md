@@ -494,7 +494,10 @@ piccolo pannello web (porta `7690`, nessun LLM) che:
 
 Pubblicazione tramite il tuo tunnel Cloudflare (container separato):
 
-1. Il compose pubblica `7690` sull'host ZimaOS.
+1. La porta `7690` deve essere pubblicata sull'host. Le app ZimaOS già
+   importate **non** prendono le nuove porte con l'aggiornamento
+   dell'immagine: nelle impostazioni dell'app aggiungi la porta
+   `7690` → `7690` TCP (oppure reimporta `zimaos-compose.yml`).
 2. In Cloudflare Zero Trust → Networks → Tunnels → il tuo tunnel → *Public
    hostname*: `omp.tuodominio.it` → `http://<IP-host-ZimaOS>:7690`.
 3. Consigliato: Access → Applications → Self-hosted su quell'hostname con
@@ -502,7 +505,9 @@ Pubblicazione tramite il tuo tunnel Cloudflare (container separato):
    scrivere nei terminali: non lasciarlo protetto solo dal token.
 4. Imposta `DEVBOX_PANEL_URL=https://omp.tuodominio.it` nell'app ZimaOS.
 5. Da Termius: `omp-panel login` → screenshot → Google Lens. Il cookie dura un
-   anno; aggiungi la pagina alla schermata Home.
+   anno; aggiungi la pagina alla schermata Home. Solo in rete locale, senza
+   tunnel: `omp-panel login http://<IP-ZimaOS>:7690` (l'IP del container,
+   `172.x`, non è raggiungibile dal telefono).
 
 Gestione: `omp-panel status|restart|logs`, `omp-panel rotate-token` per
 scollegare tutti i browser. Il token sta in `/persist/panel/token`.

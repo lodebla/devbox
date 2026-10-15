@@ -98,6 +98,8 @@
 <div id="toast"></div>
 
 <script>
+// Login links land on /#t=<token>; the cookie is already set, so drop the token from the address bar.
+if (location.hash.includes("t=")) history.replaceState(null, "", "/");
 const $ = (s) => document.querySelector(s);
 let current = null;      // tmux session name shown in detail view
 let screenTimer = null;

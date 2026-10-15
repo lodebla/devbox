@@ -214,29 +214,66 @@ async function api(req: Request, url: URL): Promise<Response> {
 
 const PAGE = readFileSync(new URL("./index.html", import.meta.url), "utf8");
 
+// Shown instead of the app when the browser has no valid cookie. Login links
+// redirect to `/#t=<token>`: the fragment stays in the address bar, so "Open in
+// Chrome" from an in-app browser (Google Lens) carries the token to the real
+// browser, where this page trades it for a cookie and drops it from the URL.
+const LOGIN_PAGE = `<!doctype html><html lang="it"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>OMP devbox · login</title>
+<style>body{margin:0;padding:24px;background:#111418;color:#e6e9ee;font:16px/1.5 system-ui,sans-serif}
+code{background:#1b2027;padding:2px 6px;border-radius:6px}input,button{width:100%;box-sizing:border-box;margin-top:8px;padding:12px;border-radius:10px;border:1px solid #2c333d;background:#0c0f13;color:inherit;font:inherit}
+button{background:#5aa9ff;color:#06121f;font-weight:600;border:0}#msg{color:#ef5d5d}</style></head><body>
+<h2>OMP devbox</h2><p id="msg"></p>
+<p>Non sei collegato in questo browser. Sul devbox esegui <code>omp-panel login &lt;url&gt;</code> e apri il QR con Google Lens.
+Se il link si apre dentro l'app Google, usa il menu <b>Apri in Chrome</b>: il login passa da solo.</p>
+<p>Oppure incolla il token (<code>cat /persist/panel/token</code>):</p>
+<input id="t" autocomplete="off" autocapitalize="off" placeholder="token"><button id="go">Entra</button>
+<script>
+async function login(t) {
+  const r = await fetch("/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ t: t.trim() }) });
+  if (r.ok) location.replace("/"); else document.getElementById("msg").textContent = "Token non valido o scaduto (omp-panel rotate-token?).";
+}
+const fromHash = new URLSearchParams(location.hash.slice(1)).get("t");
+if (fromHash) login(fromHash);
+document.getElementById("go").onclick = () => login(document.getElementById("t").value);
+</script></body></html>`;
+
+function sessionCookie(req: Request, url: URL): string {
+	const secure = req.headers.get("x-forwarded-proto") === "https" || url.protocol === "https:";
+	// Lax, not Strict: the login link is opened from another app (Lens), and a Strict
+	// cookie is withheld on that cross-site navigation. API writes need a JSON content
+	// type, so cross-site forms still cannot drive the panel.
+	return `${COOKIE}=${encodeURIComponent(TOKEN)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=31536000${secure ? "; Secure" : ""}`;
+}
+
 Bun.serve({
 	port: PORT,
 	hostname: HOST,
 	async fetch(req) {
 		const url = new URL(req.url);
 		if (url.pathname === "/login") {
-			if (!tokenOk(url.searchParams.get("t"))) return new Response("invalid token", { status: 403 });
-			const secure = req.headers.get("x-forwarded-proto") === "https" || url.protocol === "https:";
+			const ua = req.headers.get("user-agent") ?? "?";
+			if (req.method === "POST") {
+				const body = (await req.json().catch(() => ({}))) as { t?: unknown };
+				const ok = typeof body.t === "string" && tokenOk(body.t);
+				console.log(`${new Date().toISOString()} login POST ${ok ? "ok" : "rejected"} ua=${ua}`);
+				if (!ok) return json({ error: "invalid token" }, 403);
+				return new Response(null, { status: 204, headers: { "set-cookie": sessionCookie(req, url) } });
+			}
+			const t = url.searchParams.get("t");
+			const ok = tokenOk(t);
+			console.log(`${new Date().toISOString()} login link ${ok ? "ok" : "rejected"} ua=${ua}`);
+			if (!ok) return new Response("invalid token", { status: 403 });
 			return new Response(null, {
 				status: 303,
-				headers: {
-					location: "/",
-					// Lax, not Strict: the login link is opened from another app (Lens), and a Strict
-					// cookie is withheld on that cross-site redirect chain. API writes need a JSON
-					// content type, so cross-site forms still cannot drive the panel.
-					"set-cookie": `${COOKIE}=${encodeURIComponent(TOKEN)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=31536000${secure ? "; Secure" : ""}`,
-				},
+				headers: { location: `/#t=${encodeURIComponent(TOKEN)}`, "set-cookie": sessionCookie(req, url) },
 			});
 		}
 		if (!tokenOk(cookieToken(req))) {
-			return new Response("Not logged in. Run `omp-panel login` on the devbox and open the printed link.", {
+			if (url.pathname.startsWith("/api/")) return json({ error: "not logged in" }, 401);
+			return new Response(LOGIN_PAGE, {
 				status: 401,
-				headers: { "content-type": "text/plain; charset=utf-8" },
+				headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
 			});
 		}
 		if (url.pathname === "/" || url.pathname === "/index.html") {

@@ -226,7 +226,10 @@ Bun.serve({
 				status: 303,
 				headers: {
 					location: "/",
-					"set-cookie": `${COOKIE}=${encodeURIComponent(TOKEN)}; Path=/; HttpOnly; SameSite=Strict; Max-Age=31536000${secure ? "; Secure" : ""}`,
+					// Lax, not Strict: the login link is opened from another app (Lens), and a Strict
+					// cookie is withheld on that cross-site redirect chain. API writes need a JSON
+					// content type, so cross-site forms still cannot drive the panel.
+					"set-cookie": `${COOKIE}=${encodeURIComponent(TOKEN)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=31536000${secure ? "; Secure" : ""}`,
 				},
 			});
 		}

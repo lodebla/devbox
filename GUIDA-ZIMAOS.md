@@ -8,7 +8,6 @@ Un solo container `omp-devbox` contiene:
 
 - OpenSSH server;
 - `tmux`;
-- demone remoto di Tern (QUIC su UDP 8376, autenticazione con le chiavi SSH di `dev`);
 - OMP;
 - `orca-cli/orca`;
 - `rg`, Git, `gh`, Git LFS;
@@ -35,34 +34,6 @@ Quindi ricreare il container non elimina configurazione OMP, browser profile, ch
 
 ZimaOS può importare il Compose dalla UI, ma deve poter **scaricare** l'immagine da un registry. Il metodo più comodo è GHCR.
 
-### Prerequisito: archivi di Tern
-
-Tern è in beta chiusa: scarica dal [portale ufficiale Stencil](https://build.stencil.so/tern)
-gli archivi Linux **x86_64** e **ARM64** con il tuo account abilitato. La versione
-deve corrispondere a `ARG TERN_VERSION` nel Dockerfile (attualmente `0.9.5`).
-La build esegue il binario e controlla la versione: un archivio per un'altra
-architettura o incompatibile con Debian bookworm fa fallire la build.
-
-Per la build locale rinomina gli archivi `tern-amd64.tar.gz` e
-`tern-arm64.tar.gz`; non estrarli e non aggiungerli a Git (`*.tar.gz` è già
-ignorato). Sono passati come segreti BuildKit, non come credenziali Stencil.
-Quando cambi versione aggiorna anche `TERN_VERSION`, che invalida la cache
-dell'installazione: BuildKit non invalida i layer quando cambia solo un segreto.
-
-Per GitHub Actions, rendi disponibili i due archivi scaricati tramite URL HTTPS
-diretti accessibili al runner, ad esempio in uno storage privato con URL firmati.
-In **Settings → Secrets and variables → Actions → Repository secrets** aggiungi:
-
-- `TERN_AMD64_ARCHIVE_URL`: URL dell'archivio Linux x86_64;
-- `TERN_ARM64_ARCHIVE_URL`: URL dell'archivio Linux ARM64 della stessa versione.
-
-Gli URL devono restituire il tar.gz, non la pagina di login del portale.
-Rinnova gli URL firmati se scadono. Senza gli archivi la CI fallisce con un
-messaggio esplicito; non viene pubblicata un'immagine priva di Tern.
-Non inserire cookie, token Stencil o binari nel repository. Prima di rendere
-pubblica l'immagine, verifica le condizioni di distribuzione della beta;
-mantieni privati gli archivi e il registry se necessario.
-
 ### Metodo consigliato: GitHub Actions + GHCR
 
 1. Crea un repository GitHub chiamato, per esempio, `omp-devbox` (il sorgente del kit non contiene segreti).
@@ -79,7 +50,7 @@ git push -u origin main
 
 Se preferisci HTTPS, usa il normale URL HTTPS del repository al posto del remote SSH.
 
-3. Il workflow `.github/workflows/build-image.yml` partirà sul push di `main`. Prima costruisce e **avvia realmente** la variante AMD64 come smoke test (`devbox-health`, Chromium/CDP, GUI spenta di default, un vero login SSH con chiave pubblica e una connessione Tern autenticata sulla porta UDP pubblicata); solo dopo il test costruisce AMD64 + ARM64 e pubblica:
+3. Il workflow `.github/workflows/build-image.yml` partirà sul push di `main`. Prima costruisce e **avvia realmente** la variante AMD64 come smoke test (`devbox-health`, Chromium/CDP, GUI spenta di default e un vero login SSH con chiave pubblica); solo dopo il test costruisce AMD64 + ARM64 e pubblica:
 
 ```text
 ghcr.io/TUO_UTENTE/omp-devbox:latest
@@ -92,21 +63,11 @@ ghcr.io/TUO_UTENTE/omp-devbox:latest
 Se hai Docker sul PC:
 
 ```bash
-docker build --secret id=tern_amd64,src=./tern-amd64.tar.gz -t TUO_REGISTRY/omp-devbox:latest .
+docker build -t TUO_REGISTRY/omp-devbox:latest .
 docker push TUO_REGISTRY/omp-devbox:latest
 ```
 
 Poi usa quell'indirizzo nel Compose ZimaOS.
-
-Su un host ARM64 usa invece `--secret id=tern_arm64,src=./tern-arm64.tar.gz`.
-Per una build locale tramite Compose:
-
-```bash
-# AMD64
-TERN_ARCHIVE=./tern-amd64.tar.gz docker compose -f docker-compose.local.yml up -d --build
-# ARM64
-TERN_ARCH=arm64 TERN_ARCHIVE=./tern-arm64.tar.gz docker compose -f docker-compose.local.yml up -d --build
-```
 
 ---
 
@@ -155,10 +116,8 @@ e impostare la password VNC in seguito dall'interno del container con `browser-g
 Le porte sono:
 
 ```text
-2222/TCP -> SSH del devbox
-6080/TCP -> noVNC, ma c'è un listener solo quando esegui browser-gui start
-7690/TCP -> pannello OMP per il telefono
-8376/UDP -> Tern remoto (QUIC)
+2222 -> SSH del devbox
+6080 -> noVNC, ma c'è un listener solo quando esegui browser-gui start
 ```
 
 **La porta CDP 9222 non va aggiunta.** Rimane raggiungibile solamente come `127.0.0.1:9222` dentro devbox.
@@ -213,46 +172,6 @@ Al primo collegamento accetta la host key.
 
 Le host key SSH sono salvate in `/persist`, quindi non cambiano quando ricrei il container.
 
-### Collegamento con Tern
-
-Il container avvia `tern remote serve --user` come `dev`, senza systemd e
-senza accesso remoto come root. Usa le stesse chiavi di
-`/persist/ssh/authorized_keys`, inclusa la chiave bootstrap
-`DEVBOX_AUTHORIZED_KEYS`. Sul client carica la chiave nel tuo agente SSH:
-
-```bash
-ssh-add ~/.ssh/omp_devbox
-```
-
-In Tern apri **Hosts → Add remote host** e inserisci
-`dev@IP_DEL_TUO_SERVER:8376`. È la porta **UDP 8376**, non la porta SSH 2222.
-Prima di accettare la chiave del server, confronta la fingerprint con:
-
-```bash
-ssh devbox 'tern remote host-key --state-dir /persist/tern/remote'
-```
-
-Il risultato JSON contiene `fingerprint` ed `endpoint_id`. Dopo aver
-approvato la fingerprint, puoi diagnosticare il collegamento dal client con:
-
-```bash
-tern remote doctor dev@IP_DEL_TUO_SERVER:8376
-```
-
-Configurazione e sessioni sono in `/persist/tern`; la chiave del servizio
-remoto è in `/persist/tern/remote` e sopravvive alla ricreazione del container.
-Per leggere i log da SSH:
-
-```bash
-cat /persist/tern/remote.log
-```
-
-Il mapping Compose apre la porta del container sull'host, ma non modifica
-firewall o router: per una connessione diretta devono consentire **UDP 8376**
-fino al server. Preferisci LAN o VPN; un tunnel SSH o un hostname HTTP
-Cloudflare non trasporta QUIC. Tern può anche usare il proprio relay iroh
-tramite endpoint ID, se il servizio può raggiungere `iroh.stencil.so` in HTTPS.
-
 ---
 
 ## 7. Verifica l'ambiente
@@ -272,7 +191,6 @@ rg
 git
 gh
 tmux
-tern
 bun
 node
 npm
@@ -281,7 +199,6 @@ go
 chromium
 chrome-devtools-mcp
 browser CDP
-Tern remote UDP 8376
 ```
 
 Controlla anche:
@@ -290,7 +207,6 @@ Controlla anche:
 omp --version
 orca version
 rg --version
-tern --version
 browser-service status
 ```
 

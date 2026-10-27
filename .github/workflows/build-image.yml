@@ -15,20 +15,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
-      - name: Download supplied Tern AMD64 archive
-        env:
-          TERN_AMD64_ARCHIVE_URL: ${{ secrets.TERN_AMD64_ARCHIVE_URL }}
-        run: |
-          : "${TERN_AMD64_ARCHIVE_URL:?Set the TERN_AMD64_ARCHIVE_URL repository secret}"
-          curl --fail --silent --show-error --location "$TERN_AMD64_ARCHIVE_URL" --output /tmp/tern-amd64.tar.gz
       - uses: docker/build-push-action@v6
         with:
           context: .
           load: true
           platforms: linux/amd64
           tags: omp-devbox:smoke
-          secret-files: |
-            tern_amd64=/tmp/tern-amd64.tar.gz
       - name: Create smoke-test SSH key
         run: ssh-keygen -q -t ed25519 -N '' -f /tmp/omp-devbox-smoke-key
       - name: Start devbox
@@ -36,7 +28,6 @@ jobs:
           docker run -d --name omp-devbox-smoke \
             -e DEVBOX_AUTHORIZED_KEYS="$(cat /tmp/omp-devbox-smoke-key.pub)" \
             -p 127.0.0.1:22222:22 \
-            -p 127.0.0.1:28376:8376/udp \
             omp-devbox:smoke
       - name: Wait for SSH and browser
         run: |
@@ -63,19 +54,6 @@ jobs:
           done
           docker logs omp-devbox-smoke
           exit 1
-      - name: Verify authenticated Tern connection over published UDP
-        run: |
-          docker cp omp-devbox-smoke:/usr/local/bin/tern /tmp/tern-client
-          export TERN_CONFIG_DIR=/tmp/tern-client-config
-          export XDG_STATE_HOME=/tmp/tern-client-state
-          eval "$(ssh-agent -s)"
-          trap 'ssh-agent -k >/dev/null' EXIT
-          ssh-add /tmp/omp-devbox-smoke-key
-          fingerprint="$(docker exec -u dev omp-devbox-smoke tern remote host-key --state-dir /persist/tern/remote | jq -er .fingerprint)"
-          /tmp/tern-client remote trust 127.0.0.1:28376 "$fingerprint"
-          /tmp/tern-client remote doctor dev@127.0.0.1:28376 | tee /tmp/tern-doctor.log
-          grep -Eq '^ok[[:space:]]+udp[[:space:]]' /tmp/tern-doctor.log
-          grep -Eq '^ok[[:space:]]+auth[[:space:]]' /tmp/tern-doctor.log
       - name: Verify OMP and Codex dev tooling
         run: |
           docker exec -u dev omp-devbox-smoke bash -lc 'omp --version'
@@ -136,15 +114,6 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Download supplied Tern archives
-        env:
-          TERN_AMD64_ARCHIVE_URL: ${{ secrets.TERN_AMD64_ARCHIVE_URL }}
-          TERN_ARM64_ARCHIVE_URL: ${{ secrets.TERN_ARM64_ARCHIVE_URL }}
-        run: |
-          : "${TERN_AMD64_ARCHIVE_URL:?Set the TERN_AMD64_ARCHIVE_URL repository secret}"
-          : "${TERN_ARM64_ARCHIVE_URL:?Set the TERN_ARM64_ARCHIVE_URL repository secret}"
-          curl --fail --silent --show-error --location "$TERN_AMD64_ARCHIVE_URL" --output /tmp/tern-amd64.tar.gz
-          curl --fail --silent --show-error --location "$TERN_ARM64_ARCHIVE_URL" --output /tmp/tern-arm64.tar.gz
       - uses: docker/metadata-action@v5
         id: meta
         with:
@@ -159,6 +128,3 @@ jobs:
           platforms: linux/amd64,linux/arm64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          secret-files: |
-            tern_amd64=/tmp/tern-amd64.tar.gz
-            tern_arm64=/tmp/tern-arm64.tar.gz

@@ -12,9 +12,16 @@ check_cmd() {
   fi
 }
 
-for cmd in omp orca rg git gh tmux bun node npm python3 go chromium chrome-devtools-mcp; do
+for cmd in omp orca rg git gh tmux tern bun node npm python3 go chromium chrome-devtools-mcp; do
   check_cmd "$cmd"
 done
+
+if [[ -n "$(ss -H -lun 'sport = :8376')" ]]; then
+  echo '[ok]   Tern remote     UDP 8376'
+else
+  echo '[fail] Tern remote     no listener on UDP 8376; see /persist/tern/remote.log'
+  fail=1
+fi
 
 if curl -fsS --max-time 1 http://127.0.0.1:9222/json/version >/dev/null 2>&1; then
   echo '[ok]   browser CDP     http://127.0.0.1:9222'

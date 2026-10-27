@@ -4,6 +4,7 @@ Persistent coding workstation designed for a ZimaOS server:
 
 - SSH + tmux
 - tmux mouse scrolling + true-color defaults for mobile terminals (Termius)
+- Tern remote daemon with SSH-key authentication over QUIC (UDP 8376)
 - Oh My Pi (OMP)
 - OpenAI Codex CLI with persistent `~/.codex` auth/config
 - `orca-cli/orca`
@@ -27,6 +28,8 @@ The daily workflow does **not** require Docker or root access on the ZimaOS host
 PC / phone
    |
    +-- SSH :2222 ---------> tmux / OMP / orca / tools
+   +-- Tern :8376/UDP ----> persistent Tern sessions / OMP
+   |
    |                              |
    |                              | Chrome DevTools MCP
    |                              v
@@ -62,6 +65,45 @@ omp-session qr myproject      # phone join QR (Collab, full control)
 omp-qr                        # list every shared OMP session / show its QR
 omp-panel login               # phone panel login QR (sessions, slash commands, keys)
 ```
+
+## Tern remoto
+
+Il demone di [Tern di Stencil](https://stencil.so/tern) parte automaticamente
+come utente `dev` e accetta le chiavi già presenti in
+`/persist/ssh/authorized_keys`. Configurazione, sessioni e identità del server
+restano in `/persist/tern`; il log del servizio è
+`/persist/tern/remote.log`.
+
+Entrambi i Compose pubblicano **8376/UDP**, non TCP. Nell'app Tern aggiungi
+`dev@IP_DEL_SERVER:8376`; carica la chiave SSH del devbox nel tuo `ssh-agent`.
+Confronta la fingerprint proposta con quella restituita nel container da:
+
+```bash
+tern remote host-key --state-dir /persist/tern/remote
+```
+
+La build richiede un archivio Linux ufficiale della beta
+([download autenticato](https://build.stencil.so/tern)), della versione indicata
+da `TERN_VERSION` nel Dockerfile (attualmente `0.9.5`):
+
+```bash
+docker build --secret id=tern_amd64,src=./tern-amd64.tar.gz -t omp-devbox:local .
+# Oppure, su AMD64:
+TERN_ARCHIVE=./tern-amd64.tar.gz docker compose -f docker-compose.local.yml up -d --build
+# Su ARM64:
+TERN_ARCH=arm64 TERN_ARCHIVE=./tern-arm64.tar.gz docker compose -f docker-compose.local.yml up -d --build
+```
+
+Gli archivi non vanno committati. La CI legge gli URL degli archivi forniti dai
+segreti `TERN_AMD64_ARCHIVE_URL` e `TERN_ARM64_ARCHIVE_URL` e li passa a BuildKit
+come file segreti; nessuna credenziale Stencil entra nell'immagine.
+Vedi [la guida](GUIDA-ZIMAOS.md#2-pubblica-una-volta-limmagine-docker) per la
+preparazione degli archivi e della CI.
+
+Per collegamenti diretti, consenti UDP 8376 anche nel firewall del server e,
+se necessario, nel router. I tunnel SSH e HTTP/Cloudflare non trasportano questo
+collegamento QUIC: usa una rotta UDP raggiungibile, ad esempio LAN o VPN.
+
 
 ## Fusion Harness in OMP
 

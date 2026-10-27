@@ -7,6 +7,7 @@ ARG COMMANDCODE_PROVIDER_VERSION=0.4.2
 ARG YAML_VERSION=2.9.0
 ARG CHROME_DEVTOOLS_MCP_VERSION=1.6.0
 ARG CODEX_VERSION=latest
+ARG TERN_VERSION=0.9.5
 
 FROM golang:bookworm AS orca-builder
 RUN mkdir -p /out && GOBIN=/out go install github.com/orca-cli/orca/cmd/orca@latest
@@ -17,6 +18,7 @@ FROM node:${NODE_MAJOR}-bookworm
 
 ARG OMP_VERSION=latest
 ARG TARGETARCH
+ARG TERN_VERSION
 ARG COMMANDCODE_PROVIDER_VERSION
 ARG YAML_VERSION
 ARG TREE_SITTER_CLI_VERSION
@@ -29,6 +31,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     DISPLAY=:99 \
     XDG_CONFIG_HOME=/persist/config \
     XDG_DATA_HOME=/persist/data \
+    TERN_CONFIG_DIR=/persist/tern \
     GIT_CONFIG_GLOBAL=/persist/gitconfig \
     PI_CONFIG_FILES=/etc/devbox/omp-server.yml \
     PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium \
@@ -53,6 +56,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* \
     && mkdir -p /run/sshd /opt/omp /opt/npm-global /etc/devbox/fusion-harness \
     && ln -sf /usr/bin/fdfind /usr/local/bin/fd
+
+# Supply the official beta archive as a BuildKit secret, never a committed
+# binary or a Stencil credential. Each target receives its own Linux build.
+RUN --mount=type=secret,id=tern_${TARGETARCH},target=/tmp/tern.tar.gz,required=true \
+    set -eux; \
+    mkdir -p /tmp/tern-dist; \
+    tar -xzf /tmp/tern.tar.gz -C /tmp/tern-dist; \
+    tern_binary="$(find /tmp/tern-dist -type f -name tern -print -quit)"; \
+    test -n "$tern_binary"; \
+    install -m 0755 "$tern_binary" /usr/local/bin/tern; \
+    tern --version | grep -F "tern ${TERN_VERSION} ("; \
+    rm -rf /tmp/tern-dist
 
 # Kickstart.nvim tracks the latest stable Neovim. Debian stable is normally
 # behind, so install the official stable tarball for the image architecture.
@@ -132,5 +147,5 @@ RUN chmod +x /usr/local/bin/browser-service \
              /usr/local/bin/entrypoint
 
 WORKDIR /workspace
-EXPOSE 22 6080 7690
+EXPOSE 22 6080 7690 8376/udp
 ENTRYPOINT ["/usr/local/bin/entrypoint"]

@@ -26,3 +26,22 @@ services:
     volumes:
       - ./data/persist:/persist
       - ./data/workspace:/workspace
+      - ./data/zima-admin-exchange:/zima-exchange
+
+  zima-admin:
+    build:
+      context: .
+      dockerfile: host-admin/Dockerfile
+    image: omp-zima-admin:local
+    container_name: zima-admin
+    restart: unless-stopped
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:mode=1777
+    volumes:
+      - ./data/zima-admin-private:/private
+      - ./data/zima-admin-exchange:/exchange

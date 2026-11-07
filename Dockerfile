@@ -116,9 +116,11 @@ COPY config/omp-server.yml /etc/devbox/omp-server.yml
 COPY config/omp-devbox-mcp.json /etc/devbox/omp-devbox-mcp.json
 COPY config/tmux.conf /etc/devbox/tmux.conf
 COPY bin/ /usr/local/bin/
+COPY host-admin/client.py host-admin/common.py /opt/zima-admin/
 COPY panel/ /opt/devbox-panel/
 COPY skills/ /etc/devbox/skills/
-RUN chmod +x /usr/local/bin/browser-service \
+RUN rm /usr/local/bin/zima-admin \
+    && chmod +x /usr/local/bin/browser-service \
              /usr/local/bin/browser-gui \
              /usr/local/bin/omp-sync-import \
              /usr/local/bin/enable-fusion-harness \
@@ -126,6 +128,7 @@ RUN chmod +x /usr/local/bin/browser-service \
              /usr/local/bin/omp-session \
              /usr/local/bin/omp-qr \
              /usr/local/bin/omp-panel \
+             /usr/local/bin/zima-host \
              /usr/local/bin/omp-raw \
              /usr/local/bin/omp-update \
              /usr/local/bin/orca-update \

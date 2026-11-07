@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+installed_client=/opt/zima-admin/client.py
+if [[ -f "$installed_client" ]]; then
+  exec python3 "$installed_client" "$@"
+fi
+
+script_path="$(readlink -f -- "${BASH_SOURCE[0]}")"
+script_dir="$(dirname -- "$script_path")"
+repo_client="$script_dir/../host-admin/client.py"
+if [[ -f "$repo_client" ]]; then
+  exec python3 "$repo_client" "$@"
+fi
+
+printf 'zima-host: client not found at %s or %s\n' "$installed_client" "$repo_client" >&2
+exit 127

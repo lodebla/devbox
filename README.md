@@ -148,3 +148,37 @@ Follow **[GUIDA-ZIMAOS.md](GUIDA-ZIMAOS.md)**. It includes image publishing, Zim
 ### SSH keys persistenti
 
 `DEVBOX_AUTHORIZED_KEYS` viene usata come chiave bootstrap: all'avvio viene aggiunta a `/persist/ssh/authorized_keys` solo se manca. Il file non viene più sovrascritto, quindi eventuali chiavi aggiunte manualmente (per esempio Termius) restano presenti dopo restart o ricreazioni del container, purché `/persist` sia montato sul volume persistente.
+
+## Accesso amministrativo a ZimaOS
+
+`zima-host` prepara richieste per l'host senza eseguirle. Il container separato
+`zima-admin` conserva chiave SSH e configurazione in un volume privato **non
+montato in devbox**. Non espone porte e non riceve il socket Docker o privilegi
+host. Ogni esecuzione richiede un'approvazione da un terminale personale.
+
+Dentro devbox, anche dall'agent:
+
+```bash
+zima-host request --sudo -- docker ps
+zima-host list
+zima-host result ID_RICHIESTA
+```
+
+Da una tua connessione SSH o dal terminale web di **ZimaOS**, non dagli strumenti
+dell'agent, configura una volta e approva le singole richieste:
+
+```bash
+sudo docker exec -it zima-admin zima-admin setup IP_ZIMAOS UTENTE_ZIMAOS
+sudo docker exec -it zima-admin zima-admin approve ID_RICHIESTA
+```
+
+Le password SSH del bootstrap e sudo vengono inserite soltanto nel terminale
+personale. La password sudo passa in memoria e tramite una pipe anonima: non è
+salvata, passata negli argomenti o in variabili d'ambiente, né restituita al
+modello. L'output **del comando approvato** è invece condiviso: non approvare
+comandi che leggono credenziali o avviano shell/servizi amministrativi permanenti.
+
+Servono le due immagini aggiornate e i mount del Compose aggiornato; un semplice
+restart della vecchia devbox non aggiunge il modulo. Installazione, verifica
+dell'identità SSH, limiti e revoca sono nella sezione **20** di
+[GUIDA-ZIMAOS.md](GUIDA-ZIMAOS.md).

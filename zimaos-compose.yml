@@ -31,6 +31,22 @@ services:
     volumes:
       - /DATA/AppData/omp-devbox/persist:/persist
       - /DATA/AppData/omp-devbox/workspace:/workspace
+      - /DATA/AppData/omp-zima-admin/exchange:/zima-exchange
+
+  zima-admin:
+    image: ghcr.io/REPLACE_WITH_YOUR_GITHUB_USER/omp-zima-admin:latest
+    container_name: zima-admin
+    restart: unless-stopped
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:mode=1777
+    volumes:
+      - /DATA/AppData/omp-zima-admin/private:/private
+      - /DATA/AppData/omp-zima-admin/exchange:/exchange
 
 x-casaos:
   architectures:

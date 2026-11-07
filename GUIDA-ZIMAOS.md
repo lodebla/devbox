@@ -4,7 +4,7 @@ Questa guida porta da zero a un ambiente persistente sul server con OMP, tmux, o
 
 ## 1. Cosa viene creato
 
-Un solo container `omp-devbox` contiene:
+Il container `omp-devbox` contiene:
 
 - OpenSSH server;
 - `tmux`;
@@ -27,6 +27,11 @@ Persistono fuori dal container:
 ```
 
 Quindi ricreare il container non elimina configurazione OMP, browser profile, chiavi SSH, stato Orca e repository.
+
+Il Compose include anche `zima-admin`, un esecutore SSH separato per
+l'amministrazione dell'host con approvazione umana. Non riceve privilegi host,
+socket Docker o porte pubblicate. La sua chiave SSH resta fuori da devbox;
+richieste e risultati passano per una directory condivisa. Vedi la sezione 20.
 
 ---
 
@@ -863,3 +868,166 @@ Se stai montando una cartella preesistente, imposta `PUID` e `PGID` nel Compose 
 ## Codex CLI persistente
 
 L'immagine include Codex CLI e mantiene `~/.codex` in `/persist/codex`. `/opt/omp` e `/opt/npm-global` sono scrivibili da `dev`, così gli update di OMP/Codex non falliscono con errori `EACCES`. Dopo un rebuild puoi verificare con `omp --version`, `codex --version`, `locale`, e `tmux show -g mouse`.
+
+## 20. Amministrare ZimaOS senza dare la password all'agent
+
+### Confine di sicurezza
+
+L'agent continua a girare in devbox. `zima-host` scrive richieste, ma non dispone
+della chiave SSH per ZimaOS e non può approvarle tramite il modulo amministrativo.
+La connessione viene eseguita da `zima-admin` soltanto quando apri personalmente
+il suo terminale e approvi il comando mostrato.
+
+I mount aggiuntivi sono:
+
+| Percorso host | Devbox | Zima-admin |
+|---|---|---|
+| `/DATA/AppData/omp-zima-admin/exchange` | `/zima-exchange` | `/exchange` |
+| `/DATA/AppData/omp-zima-admin/private` | Non montato | `/private` |
+
+`/private` contiene chiave SSH, identità dell'host, destinazione e registro
+privato delle approvazioni. Non contiene la password dell'account. La directory
+di scambio non contiene credenziali, ma richieste e output possono comunque
+contenere dati sensibili se li includi nei comandi.
+
+Questo isolamento presuppone che devbox non riceva altri mount che raggiungono
+il volume privato, il socket Docker, namespace host o modalità privilegiata.
+Il suo `sudo` interno rimane disponibile: non oltrepassa da solo il confine
+del container. Non protegge da un amministratore dell'host o da vulnerabilità
+del kernel/container runtime.
+
+### Installazione e aggiornamento
+
+1. Pubblica le immagini aggiornate tramite il workflow del repository:
+   `omp-devbox:latest` e `omp-zima-admin:latest`. Il workflow esegue i test Python,
+   uno smoke SSH/sudo e i controlli delle immagini prima della pubblicazione.
+2. In `zimaos-compose.yml`, sostituisci l'utente GitHub in **entrambe** le immagini.
+3. Aggiorna/reimporta il Compose nella UI di ZimaOS e ricrea i servizi mantenendo
+   i volumi esistenti. Non basta riavviare il vecchio container: deve comparire
+   anche `zima-admin` e devbox deve ricevere `/zima-exchange`.
+4. Abilita l'SSH dell'host da Settings → Developer Mode → SSH Access, se disattivato.
+   Usa un account normale che abbia i permessi sudo necessari; non abilitare
+   il login SSH root per questo sistema.
+
+Per sviluppo locale, il Compose conserva scambio e dati privati in directory
+distinte sotto `./data/`. Non montare l'intera directory `data/` in devbox.
+
+### Configurazione iniziale: solo dal tuo terminale
+
+Apri una tua connessione SSH **all'host ZimaOS**, o il suo terminale web,
+indipendente dalla chat e dalle sessioni condivise dell'agent:
+
+```bash
+sudo docker exec -it zima-admin zima-admin setup IP_ZIMAOS UTENTE_ZIMAOS
+```
+
+Se la porta SSH dell'host non è 22, aggiungi `--port PORTA`. L'indirizzo deve
+essere raggiungibile dal container amministrativo: `127.0.0.1` indicherebbe il
+container stesso, non l'host. Usa l'indirizzo LAN di ZimaOS.
+
+Il setup genera una chiave dedicata in `/private`, chiede di verificare l'identità
+SSH dell'host e installa la chiave pubblica nell'account tramite `ssh-copy-id`.
+Confronta l'impronta mostrata con le chiavi host lette da una console attendibile
+di ZimaOS, prima di rispondere `yes`. Non disattivare il controllo della chiave.
+La password di login SSH eventualmente richiesta va digitata **lì**, non in chat.
+Il setup verifica poi un accesso a chiave senza password interattiva.
+
+Prerequisiti sull'host: SSH a chiave consentito e home/`authorized_keys`
+dell'account scrivibili durante il bootstrap. Il modulo non rimonta il sistema
+in scrittura né cambia le regole sudo di ZimaOS. Se il sistema non consente
+l'installazione della chiave, va risolto questo requisito prima dell'uso.
+Verifica inoltre che l'autorizzazione sopravviva a un riavvio e agli aggiornamenti
+della tua versione di ZimaOS: il volume privato persistente non può garantire
+la persistenza di `authorized_keys` sul sistema remoto.
+
+### Richiesta dell'agent e approvazione umana
+
+Dentro devbox, l'agent può richiedere anche i comandi diagnostici che su ZimaOS
+richiedono sudo:
+
+```bash
+zima-host request --sudo -- docker ps
+```
+
+Il comando stampa un ID. Non apre SSH e non esegue `docker ps`.
+Il separatore `--` è obbligatorio; gli argomenti sono conservati come array,
+senza interpretazione shell aggiuntiva. Per utilizzare intenzionalmente una
+pipeline devi richiedere esplicitamente una shell, per esempio `sh -c ...`:
+approvarla concede alla shell tutta l'autorità dell'account richiesto.
+
+Dal tuo terminale personale sull'host:
+
+```bash
+sudo docker exec -it zima-admin zima-admin approve ID_RICHIESTA
+```
+
+Controlla destinazione, flag sudo e **tutti** gli argomenti mostrati. Digita
+`APPROVE` per eseguire quella fotografia della richiesta, oppure `REJECT` per
+rifiutarla senza autenticazione. Un'altra risposta annulla lasciandola pendente.
+La richiesta non viene riletta dopo la conferma: modificarla mentre la stai
+approvando non cambia il comando eseguito.
+
+Con `--sudo`, il prompt successivo legge la password senza eco dal terminale.
+Non inserirla in comandi, variabili d'ambiente, file, prompt dell'LLM,
+`omp-session send`, pannello condiviso o tool interattivi dell'agent.
+Le credenziali attraversano SSH; localmente passano solo nella memoria del
+processo amministrativo e in una pipe anonima. L'autenticazione sudo è separata
+dal comando, il cui stdin è `/dev/null`: anche una regola `NOPASSWD` non lascia
+la password disponibile al comando. La cache sudo viene invalidata prima
+dell'autenticazione e al termine della shell remota.
+
+Il modulo non apre una shell root permanente. Tuttavia **il comando che approvi
+può farlo**, cambiare autorizzazioni o leggere segreti: l'approvazione non è una
+sandbox del comando. Non approvare comandi che non comprendi o che aggirano il
+flusso per-comando.
+
+L'agent recupera poi il risultato:
+
+```bash
+zima-host list
+zima-host result ID_RICHIESTA
+```
+
+Il risultato JSON contiene stato, codice di uscita, stdout e stderr. Il comando
+`result` restituisce successo quando il risultato è disponibile: controlla
+`exit_code` e `status` per sapere se l'operazione remota è riuscita.
+Il registro privato impedisce di eseguire due volte lo stesso ID, anche se
+l'agent cancella o modifica il risultato condiviso. Dopo un errore o una password
+errata serve una nuova richiesta. Se l'esecuzione è interrotta, controlla prima
+lo stato reale dell'host: l'interruzione SSH non garantisce l'annullamento
+dell'operazione remota.
+
+### Limiti, recupero e revoca
+
+- Ogni operazione attende una tua approvazione: non c'è esecuzione autonoma
+  mentre sei assente e non viene memorizzata una password riutilizzabile.
+- I comandi non sono interattivi. SSH/sudo sull'host devono consentire
+  l'esecuzione senza TTY; una policy `requiretty` viene rifiutata, non aggirata.
+- L'output condiviso è limitato a 256 KiB per stream. Superarlo può interrompere
+  il comando: richiedi output mirati e non usare questo canale per trasferire file.
+- I file condivisi sono scrivibili dall'agent: non usare un risultato pubblico
+  come attestazione attendibile. Il registro autorevole è in `/private/ledger`.
+- Mantieni una tua connessione amministrativa indipendente. Per modifiche a
+  rete, SSH, storage e aggiornamenti prepara prima backup e ripristino; il modulo
+  non offre rollback automatico.
+- Per sospendere il canale, arresta `zima-admin` dalla UI di ZimaOS. Per revocare
+  anche la credenziale, rimuovi dall'`authorized_keys` dell'account remoto la chiave
+  pubblica corrispondente a `/private/id_ed25519.pub`, verificandola per intero.
+  Non confonderla con la tua chiave personale.
+- Se cambia la chiave host, SSH si blocca. Verifica il motivo dalla console
+  attendibile prima di aggiornare il `known_hosts` privato; non bypassare il controllo.
+- Conserva con protezione il volume privato se lo includi nei backup: contiene
+  una chiave SSH senza passphrase, utilizzabile per i privilegi dell'account remoto.
+
+### Verifiche di sviluppo
+
+```bash
+python3 -m unittest discover -s tests -p 'test_zima*.py' -v
+sudo python3 tests/smoke_zima_admin.py
+```
+
+Lo smoke richiede `openssh-server`, `openssh-client`, sudo e i comandi di gestione
+utenti. Crea un account, una policy sudo e un server SSH temporanei su loopback,
+li rimuove al termine e usa esclusivamente una password di prova. Copre bootstrap
+SSH, autenticazione sudo reale, password errata, rifiuto, fotografia immutabile,
+blocco del replay e mancata divulgazione della password anche con `NOPASSWD`.

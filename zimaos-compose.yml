@@ -28,6 +28,9 @@ services:
       - target: 7690
         published: "7690"
         protocol: tcp
+      - target: 8376
+        published: "8376"
+        protocol: udp
     volumes:
       - /DATA/AppData/omp-devbox/persist:/persist
       - /DATA/AppData/omp-devbox/workspace:/workspace

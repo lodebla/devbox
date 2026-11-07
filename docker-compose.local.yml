@@ -6,6 +6,9 @@ services:
       args:
         BUN_VERSION: "1.3.14"
         OMP_VERSION: "latest"
+      secrets:
+        - source: tern_archive
+          target: tern_${TERN_ARCH:-amd64}
     image: omp-devbox:local
     container_name: omp-devbox
     hostname: omp-devbox
@@ -23,6 +26,7 @@ services:
       - "2222:22"
       - "6080:6080"
       - "7690:7690"
+      - "8376:8376/udp"
     volumes:
       - ./data/persist:/persist
       - ./data/workspace:/workspace
@@ -45,3 +49,7 @@ services:
     volumes:
       - ./data/zima-admin-private:/private
       - ./data/zima-admin-exchange:/exchange
+
+secrets:
+  tern_archive:
+    file: "${TERN_ARCHIVE:-./tern-amd64.tar.gz}"

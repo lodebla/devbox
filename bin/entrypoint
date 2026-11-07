@@ -41,6 +41,7 @@ mkdir -p \
   /persist/chromium \
   /persist/vnc \
   /persist/panel \
+  /persist/tern \
   /persist/nvim \
   /workspace
 
@@ -49,10 +50,11 @@ mkdir -p \
 # writable by the non-root dev user on every boot without recursively walking
 # large persistent trees.
 chown dev:dev /persist /persist/omp /persist/orca /persist/codex /persist/ssh /persist/ssh-host-keys \
-  /persist/config /persist/data /persist/chromium /persist/vnc /persist/nvim /persist/panel /workspace 2>/dev/null || true
+  /persist/config /persist/data /persist/chromium /persist/vnc /persist/nvim /persist/panel /persist/tern /workspace 2>/dev/null || true
 # sshd StrictModes rejects authorized_keys paths that traverse writable parent
 # directories. ZimaOS may create the bind-mounted /persist directory as 0777.
 chmod 755 /persist
+chmod 700 /persist/tern
 
 ownership_marker="/persist/.devbox-owner"
 owner_value="${PUID}:${PGID}"
@@ -166,6 +168,7 @@ export LC_ALL=C.utf8
 export DISPLAY=:99
 export XDG_CONFIG_HOME=/persist/config
 export XDG_DATA_HOME=/persist/data
+export TERN_CONFIG_DIR=/persist/tern
 export GIT_CONFIG_GLOBAL=/persist/gitconfig
 export PI_CONFIG_FILES=/etc/devbox/omp-server.yml
 export PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
@@ -195,6 +198,14 @@ if ! gosu dev env HOME=/home/dev DEVBOX_PANEL_PORT="${DEVBOX_PANEL_PORT:-7690}" 
     bash -lc 'omp-panel start'; then
   log "WARNING: phone panel did not start; inspect with: omp-panel logs"
 fi
+
+# Serve only dev's sessions, authenticated by its persistent SSH keys.
+# Tern is its own foreground service; containers do not run systemd.
+log "Starting Tern remote service on container port 8376/UDP"
+gosu dev env HOME=/home/dev TERN_CONFIG_DIR=/persist/tern \
+    nohup /usr/local/bin/tern remote serve --user \
+      --listen 0.0.0.0:8376 --state-dir /persist/tern/remote \
+      > /persist/tern/remote.log 2>&1 &
 
 log "Starting SSH on container port 22"
 exec /usr/sbin/sshd -D -e -f /etc/ssh/sshd_config

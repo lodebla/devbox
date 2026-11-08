@@ -21,7 +21,14 @@ from common import read_json, shared_dirs, write_json
 
 
 def run(argv, **kwargs):
-    return subprocess.run(argv, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, **kwargs)
+    try:
+        return subprocess.run(argv, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, **kwargs)
+    except subprocess.CalledProcessError as error:
+        # Keep captured command diagnostics visible in CI without logging stdin.
+        for output in (error.stdout, error.stderr):
+            if output:
+                print(output.decode("utf-8", "replace"), file=sys.stderr, end="")
+        raise
 
 
 def interact(argv, steps, mutate=None):
@@ -139,7 +146,7 @@ def main():
 
             def policy(nopasswd=False):
                 sudoers.write_text(
-                    f"Defaults:{username} !requiretty, timestamp_type=ppid, passwd_tries=1, lecture=never\n"
+                    f"Defaults:{username} passwd_tries=1, lecture=never\n"
                     f"{username} ALL=(root) {'NOPASSWD' if nopasswd else 'PASSWD'}: /usr/bin/id, /usr/bin/printf, /usr/bin/cat, /usr/bin/touch\n"
                 )
                 os.chmod(sudoers, 0o440)

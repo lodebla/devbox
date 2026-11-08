@@ -1031,3 +1031,7 @@ utenti. Crea un account, una policy sudo e un server SSH temporanei su loopback,
 li rimuove al termine e usa esclusivamente una password di prova. Copre bootstrap
 SSH, autenticazione sudo reale, password errata, rifiuto, fotografia immutabile,
 blocco del replay e mancata divulgazione della password anche con `NOPASSWD`.
+La policy temporanea usa direttive comuni a sudo classico e `sudo-rs`, evitando
+`requiretty` e `timestamp_type`, non riconosciute da alcune versioni di `sudo-rs`
+usate dai runner Ubuntu. Se un comando della fixture fallisce, lo smoke stampa
+stdout/stderr per rendere visibile la causa, senza stampare lo stdin.

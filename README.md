@@ -119,6 +119,10 @@ Kickstart installs its configured plugins on first `nvim` launch.
 
 `/opt/omp` e il prefix npm globale `/opt/npm-global` sono assegnati all'utente `dev`, quindi gli updater lanciati dalla sessione normale non falliscono con `EACCES`. Codex è installato nell'immagine come `@openai/codex`; il suo stato/login vive in `/persist/codex` tramite `~/.codex`, quindi sopravvive alle ricreazioni del container.
 
+L'immagine e il Compose locale usano Bun **1.4.4**, il minimo richiesto dalle
+versioni correnti di OMP. Aggiornare OMP può richiedere anche l'aggiornamento
+del runtime nell'immagine: non basta che l'installazione del pacchetto riesca.
+
 Per il login Codex puoi usare:
 
 ```bash
